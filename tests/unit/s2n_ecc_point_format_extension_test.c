@@ -14,7 +14,6 @@
  */
 
 #include "s2n_test.h"
-
 #include "tls/extensions/s2n_ec_point_format.h"
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_resume.h"
@@ -36,25 +35,25 @@ int main(int argc, char **argv)
         EXPECT_FALSE(s2n_server_ec_point_format_extension.should_send(NULL));
 
         /* Do not send for connection without chosen cipher */
-        conn->secure.cipher_suite = NULL;
+        conn->secure->cipher_suite = NULL;
         EXPECT_FALSE(s2n_server_ec_point_format_extension.should_send(conn));
 
         /* Do not send for connection without ec kex */
-        conn->secure.cipher_suite = &s2n_rsa_with_aes_128_cbc_sha;
+        conn->secure->cipher_suite = &s2n_rsa_with_aes_128_cbc_sha;
         EXPECT_FALSE(s2n_server_ec_point_format_extension.should_send(conn));
-        conn->secure.cipher_suite = &s2n_dhe_rsa_with_chacha20_poly1305_sha256;
+        conn->secure->cipher_suite = &s2n_dhe_rsa_with_chacha20_poly1305_sha256;
         EXPECT_FALSE(s2n_server_ec_point_format_extension.should_send(conn));
 
         /* Do send for connection with ec kex */
-        conn->secure.cipher_suite = &s2n_ecdhe_ecdsa_with_aes_128_cbc_sha;
+        conn->secure->cipher_suite = &s2n_ecdhe_ecdsa_with_aes_128_cbc_sha;
         EXPECT_TRUE(s2n_server_ec_point_format_extension.should_send(conn));
 
         /* Do send for connection with hybrid ec kex */
-        conn->secure.cipher_suite = &s2n_ecdhe_bike_rsa_with_aes_256_gcm_sha384;
+        conn->secure->cipher_suite = &s2n_ecdhe_kyber_rsa_with_aes_256_gcm_sha384;
         EXPECT_TRUE(s2n_server_ec_point_format_extension.should_send(conn));
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test send */
     {
@@ -62,7 +61,7 @@ int main(int argc, char **argv)
         EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
         EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
-        struct s2n_stuffer stuffer;
+        struct s2n_stuffer stuffer = { 0 };
         EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&stuffer, 0));
 
         EXPECT_SUCCESS(s2n_client_ec_point_format_extension.send(conn, &stuffer));
@@ -79,7 +78,7 @@ int main(int argc, char **argv)
 
         EXPECT_SUCCESS(s2n_stuffer_free(&stuffer));
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test recv */
     {
@@ -87,7 +86,7 @@ int main(int argc, char **argv)
         EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
         EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
-        struct s2n_stuffer stuffer;
+        struct s2n_stuffer stuffer = { 0 };
         EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&stuffer, 0));
 
         EXPECT_SUCCESS(s2n_client_ec_point_format_extension.send(conn, &stuffer));
@@ -98,7 +97,7 @@ int main(int argc, char **argv)
 
         EXPECT_SUCCESS(s2n_stuffer_free(&stuffer));
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     EXPECT_SUCCESS(s2n_config_free(config));
 

@@ -41,7 +41,7 @@ case "${S2N_BUILD_PRESET-default}" in
         : "${S2N_LIBCRYPTO:=boringssl}"
         : "${GCC_VERSION:=9}"
         ;;
-    "openssl-1-0-2")
+    "openssl-1.0.2")
         : "${S2N_LIBCRYPTO:=openssl-1.0.2}"
         : "${GCC_VERSION:=6}"
         ;;
@@ -65,6 +65,10 @@ case "${S2N_BUILD_PRESET-default}" in
         ;;
     "openssl-1.1.1_gcc9")
         : "${S2N_LIBCRYPTO:=openssl-1.1.1}"
+        : "${GCC_VERSION:=9}"
+        ;;
+    "openssl-3.0")
+        : "${S2N_LIBCRYPTO:=openssl-3.0}"
         : "${GCC_VERSION:=9}"
         ;;
 esac

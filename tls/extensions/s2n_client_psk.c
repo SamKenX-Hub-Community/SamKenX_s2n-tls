@@ -13,19 +13,19 @@
  * permissions and limitations under the License.
  */
 
-#include <sys/param.h>
-#include <stdint.h>
-
-#include "crypto/s2n_hash.h"
-#include "tls/s2n_tls.h"
-#include "tls/s2n_psk.h"
-#include "tls/s2n_tls_parameters.h"
 #include "tls/extensions/s2n_client_psk.h"
 
+#include <stdint.h>
+#include <sys/param.h>
+
+#include "crypto/s2n_hash.h"
+#include "tls/s2n_psk.h"
+#include "tls/s2n_tls.h"
+#include "tls/s2n_tls_parameters.h"
 #include "utils/s2n_bitmap.h"
 #include "utils/s2n_safety.h"
 
-#define SIZE_OF_BINDER_SIZE sizeof(uint8_t)
+#define SIZE_OF_BINDER_SIZE      sizeof(uint8_t)
 #define SIZE_OF_BINDER_LIST_SIZE sizeof(uint16_t)
 
 /* To avoid a DoS attack triggered by decrypting too many session tickets,
@@ -66,7 +66,7 @@ int s2n_client_psk_is_missing(struct s2n_connection *conn)
 
 bool s2n_client_psk_should_send(struct s2n_connection *conn)
 {
-    if (conn == NULL) {
+    if (!conn || !conn->secure) {
         return false;
     }
 
@@ -82,9 +82,9 @@ bool s2n_client_psk_should_send(struct s2n_connection *conn)
      */
     for (size_t i = 0; i < conn->psk_params.psk_list.len; i++) {
         struct s2n_psk *psk = NULL;
-        if (s2n_result_is_ok(s2n_array_get(&conn->psk_params.psk_list, i, (void**) &psk))
+        if (s2n_result_is_ok(s2n_array_get(&conn->psk_params.psk_list, i, (void **) &psk))
                 && psk != NULL
-                && conn->secure.cipher_suite->prf_alg == psk->hmac_alg) {
+                && conn->secure->cipher_suite->prf_alg == psk->hmac_alg) {
             return true;
         }
     }
@@ -134,6 +134,7 @@ static S2N_RESULT s2n_generate_obfuscated_ticket_age(struct s2n_psk *psk, uint64
 static int s2n_client_psk_send(struct s2n_connection *conn, struct s2n_stuffer *out)
 {
     POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
 
     struct s2n_psk_parameters *psk_params = &conn->psk_params;
     struct s2n_array *psk_list = &psk_params->psk_list;
@@ -145,7 +146,7 @@ static int s2n_client_psk_send(struct s2n_connection *conn, struct s2n_stuffer *
 
     for (size_t i = 0; i < psk_list->len; i++) {
         struct s2n_psk *psk = NULL;
-        POSIX_GUARD_RESULT(s2n_array_get(psk_list, i, (void**) &psk));
+        POSIX_GUARD_RESULT(s2n_array_get(psk_list, i, (void **) &psk));
         POSIX_ENSURE_REF(psk);
 
         /**
@@ -154,18 +155,18 @@ static int s2n_client_psk_send(struct s2n_connection *conn, struct s2n_stuffer *
          *# any pre-shared keys associated with a hash other than that of the
          *# selected cipher suite.
          */
-        if (s2n_is_hello_retry_handshake(conn) && conn->secure.cipher_suite->prf_alg != psk->hmac_alg) {
+        if (s2n_is_hello_retry_handshake(conn) && conn->secure->cipher_suite->prf_alg != psk->hmac_alg) {
             continue;
         }
 
         /* Write the identity */
         POSIX_GUARD(s2n_stuffer_write_uint16(out, psk->identity.size));
         POSIX_GUARD(s2n_stuffer_write(out, &psk->identity));
-        
+
         /* Write obfuscated ticket age */
         uint32_t obfuscated_ticket_age = 0;
         uint64_t current_time = 0;
-        POSIX_GUARD(conn->config->wall_clock(conn->config->sys_clock_ctx, &current_time));
+        POSIX_GUARD_RESULT(s2n_config_wall_clock(conn->config, &current_time));
         POSIX_GUARD_RESULT(s2n_generate_obfuscated_ticket_age(psk, current_time, &obfuscated_ticket_age));
         POSIX_GUARD(s2n_stuffer_write_uint32(out, obfuscated_ticket_age));
 
@@ -209,14 +210,14 @@ static S2N_RESULT s2n_select_external_psk(struct s2n_connection *conn, struct s2
 
     for (size_t i = 0; i < server_psks->len; i++) {
         struct s2n_psk *server_psk = NULL;
-        RESULT_GUARD(s2n_array_get(server_psks, i, (void**) &server_psk));
+        RESULT_GUARD(s2n_array_get(server_psks, i, (void **) &server_psk));
         RESULT_ENSURE_REF(server_psk);
 
         struct s2n_offered_psk client_psk = { 0 };
         uint16_t wire_index = 0;
 
         RESULT_GUARD_POSIX(s2n_offered_psk_list_reread(client_identity_list));
-        while(s2n_offered_psk_list_has_next(client_identity_list)) {
+        while (s2n_offered_psk_list_has_next(client_identity_list)) {
             RESULT_GUARD_POSIX(s2n_offered_psk_list_next(client_identity_list, &client_psk));
             uint16_t compare_size = MIN(client_psk.identity.size, server_psk->identity.size);
             if (s2n_constant_time_equals(client_psk.identity.data, server_psk->identity.data, compare_size)
@@ -232,7 +233,8 @@ static S2N_RESULT s2n_select_external_psk(struct s2n_connection *conn, struct s2
     return S2N_RESULT_OK;
 }
 
-static S2N_RESULT s2n_select_resumption_psk(struct s2n_connection *conn, struct s2n_offered_psk_list *client_identity_list) {
+static S2N_RESULT s2n_select_resumption_psk(struct s2n_connection *conn, struct s2n_offered_psk_list *client_identity_list)
+{
     RESULT_ENSURE_REF(conn);
     RESULT_ENSURE_REF(client_identity_list);
 
@@ -265,9 +267,9 @@ static S2N_RESULT s2n_client_psk_recv_identity_list(struct s2n_connection *conn,
 
     if (conn->config->psk_selection_cb) {
         RESULT_GUARD_POSIX(conn->config->psk_selection_cb(conn, conn->config->psk_selection_ctx, &identity_list));
-    } else if(conn->psk_params.type == S2N_PSK_TYPE_EXTERNAL) {
+    } else if (conn->psk_params.type == S2N_PSK_TYPE_EXTERNAL) {
         RESULT_GUARD(s2n_select_external_psk(conn, &identity_list));
-    } else if(conn->psk_params.type == S2N_PSK_TYPE_RESUMPTION) {
+    } else if (conn->psk_params.type == S2N_PSK_TYPE_RESUMPTION) {
         RESULT_GUARD(s2n_select_resumption_psk(conn, &identity_list));
     }
 

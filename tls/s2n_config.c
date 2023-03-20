@@ -16,35 +16,34 @@
 #include <strings.h>
 #include <time.h>
 
-#include "error/s2n_errno.h"
-
 #include "crypto/s2n_certificate.h"
 #include "crypto/s2n_fips.h"
-
+#include "crypto/s2n_hkdf.h"
+#include "error/s2n_errno.h"
 #include "tls/s2n_cipher_preferences.h"
 #include "tls/s2n_internal.h"
+#include "tls/s2n_ktls.h"
 #include "tls/s2n_security_policies.h"
 #include "tls/s2n_tls13.h"
-#include "utils/s2n_safety.h"
-#include "crypto/s2n_hkdf.h"
-#include "utils/s2n_map.h"
 #include "utils/s2n_blob.h"
+#include "utils/s2n_map.h"
+#include "utils/s2n_safety.h"
 
 #if defined(CLOCK_MONOTONIC_RAW)
-#define S2N_CLOCK_HW CLOCK_MONOTONIC_RAW
+    #define S2N_CLOCK_HW CLOCK_MONOTONIC_RAW
 #else
-#define S2N_CLOCK_HW CLOCK_MONOTONIC
+    #define S2N_CLOCK_HW CLOCK_MONOTONIC
 #endif
 
 #define S2N_CLOCK_SYS CLOCK_REALTIME
 
 static int monotonic_clock(void *data, uint64_t *nanoseconds)
 {
-    struct timespec current_time = {0};
+    struct timespec current_time = { 0 };
 
     POSIX_GUARD(clock_gettime(S2N_CLOCK_HW, &current_time));
 
-    *nanoseconds = (uint64_t)current_time.tv_sec * 1000000000ull;
+    *nanoseconds = (uint64_t) current_time.tv_sec * 1000000000ull;
     *nanoseconds += current_time.tv_nsec;
 
     return 0;
@@ -52,19 +51,19 @@ static int monotonic_clock(void *data, uint64_t *nanoseconds)
 
 static int wall_clock(void *data, uint64_t *nanoseconds)
 {
-    struct timespec current_time = {0};
+    struct timespec current_time = { 0 };
 
     POSIX_GUARD(clock_gettime(S2N_CLOCK_SYS, &current_time));
 
-    *nanoseconds = (uint64_t)current_time.tv_sec * 1000000000ull;
+    *nanoseconds = (uint64_t) current_time.tv_sec * 1000000000ull;
     *nanoseconds += current_time.tv_nsec;
 
     return 0;
 }
 
-static struct s2n_config s2n_default_config = {0};
-static struct s2n_config s2n_default_fips_config = {0};
-static struct s2n_config s2n_default_tls13_config = {0};
+static struct s2n_config s2n_default_config = { 0 };
+static struct s2n_config s2n_default_fips_config = { 0 };
+static struct s2n_config s2n_default_tls13_config = { 0 };
 
 static int s2n_config_setup_default(struct s2n_config *config)
 {
@@ -86,7 +85,6 @@ static int s2n_config_setup_fips(struct s2n_config *config)
 
 static int s2n_config_init(struct s2n_config *config)
 {
-    config->status_request_type = S2N_STATUS_REQUEST_NONE;
     config->wall_clock = wall_clock;
     config->monotonic_clock = monotonic_clock;
     config->ct_type = S2N_CT_SUPPORT_NONE;
@@ -135,8 +133,8 @@ static int s2n_config_cleanup(struct s2n_config *config)
 }
 
 static int s2n_config_update_domain_name_to_cert_map(struct s2n_config *config,
-                                                     struct s2n_blob *name,
-                                                     struct s2n_cert_chain_and_key *cert_key_pair)
+        struct s2n_blob *name,
+        struct s2n_cert_chain_and_key *cert_key_pair)
 {
     POSIX_ENSURE_REF(config);
     POSIX_ENSURE_REF(name);
@@ -151,7 +149,7 @@ static int s2n_config_update_domain_name_to_cert_map(struct s2n_config *config,
     bool key_found = false;
     POSIX_GUARD_RESULT(s2n_map_lookup(domain_name_to_cert_map, name, &s2n_map_value, &key_found));
     if (!key_found) {
-        struct certs_by_type value = {{ 0 }};
+        struct certs_by_type value = { { 0 } };
         value.certs[cert_type] = cert_key_pair;
         s2n_map_value.data = (uint8_t *) &value;
         s2n_map_value.size = sizeof(struct certs_by_type);
@@ -160,7 +158,7 @@ static int s2n_config_update_domain_name_to_cert_map(struct s2n_config *config,
         POSIX_GUARD_RESULT(s2n_map_add(domain_name_to_cert_map, name, &s2n_map_value));
         POSIX_GUARD_RESULT(s2n_map_complete(domain_name_to_cert_map));
     } else {
-        struct certs_by_type *value = (void *) s2n_map_value.data;;
+        struct certs_by_type *value = (void *) s2n_map_value.data;
         if (value->certs[cert_type] == NULL) {
             value->certs[cert_type] = cert_key_pair;
         } else if (config->cert_tiebreak_cb) {
@@ -185,7 +183,6 @@ static int s2n_config_update_domain_name_to_cert_map(struct s2n_config *config,
 
 static int s2n_config_build_domain_name_to_cert_map(struct s2n_config *config, struct s2n_cert_chain_and_key *cert_key_pair)
 {
-
     uint32_t cn_len = 0;
     POSIX_GUARD_RESULT(s2n_array_num_elements(cert_key_pair->cn_names, &cn_len));
     uint32_t san_len = 0;
@@ -194,13 +191,13 @@ static int s2n_config_build_domain_name_to_cert_map(struct s2n_config *config, s
     if (san_len == 0) {
         for (uint32_t i = 0; i < cn_len; i++) {
             struct s2n_blob *cn_name = NULL;
-            POSIX_GUARD_RESULT(s2n_array_get(cert_key_pair->cn_names, i, (void **)&cn_name));
+            POSIX_GUARD_RESULT(s2n_array_get(cert_key_pair->cn_names, i, (void **) &cn_name));
             POSIX_GUARD(s2n_config_update_domain_name_to_cert_map(config, cn_name, cert_key_pair));
         }
     } else {
         for (uint32_t i = 0; i < san_len; i++) {
             struct s2n_blob *san_name = NULL;
-            POSIX_GUARD_RESULT(s2n_array_get(cert_key_pair->san_names, i, (void **)&san_name));
+            POSIX_GUARD_RESULT(s2n_array_get(cert_key_pair->san_names, i, (void **) &san_name));
             POSIX_GUARD(s2n_config_update_domain_name_to_cert_map(config, san_name, cert_key_pair));
         }
     }
@@ -257,13 +254,13 @@ void s2n_wipe_static_configs(void)
 
 struct s2n_config *s2n_config_new(void)
 {
-    struct s2n_blob allocator = {0};
+    struct s2n_blob allocator = { 0 };
     struct s2n_config *new_config;
 
     PTR_GUARD_POSIX(s2n_alloc(&allocator, sizeof(struct s2n_config)));
     PTR_GUARD_POSIX(s2n_blob_zero(&allocator));
 
-    new_config = (struct s2n_config *)(void *)allocator.data;
+    new_config = (struct s2n_config *) (void *) allocator.data;
     if (s2n_config_init(new_config) != S2N_SUCCESS) {
         s2n_free(&allocator);
         return NULL;
@@ -289,11 +286,11 @@ static int s2n_verify_unique_ticket_key_comparator(const void *a, const void *b)
 int s2n_config_init_session_ticket_keys(struct s2n_config *config)
 {
     if (config->ticket_keys == NULL) {
-      POSIX_ENSURE_REF(config->ticket_keys = s2n_set_new(sizeof(struct s2n_ticket_key), s2n_config_store_ticket_key_comparator));
+        POSIX_ENSURE_REF(config->ticket_keys = s2n_set_new(sizeof(struct s2n_ticket_key), s2n_config_store_ticket_key_comparator));
     }
 
     if (config->ticket_key_hashes == NULL) {
-      POSIX_ENSURE_REF(config->ticket_key_hashes = s2n_set_new(SHA_DIGEST_LENGTH, s2n_verify_unique_ticket_key_comparator));
+        POSIX_ENSURE_REF(config->ticket_key_hashes = s2n_set_new(SHA_DIGEST_LENGTH, s2n_verify_unique_ticket_key_comparator));
     }
 
     return 0;
@@ -314,15 +311,27 @@ int s2n_config_free_session_ticket_keys(struct s2n_config *config)
 
 int s2n_config_free_cert_chain_and_key(struct s2n_config *config)
 {
-    /* Free the cert_chain_and_key since the application has no reference
-     * to it. This is necessary until s2n_config_add_cert_chain_and_key is deprecated. */
-    if (config->cert_allocated) {
-        for (int i = 0; i < S2N_CERT_TYPE_COUNT; i++) {
-            s2n_cert_chain_and_key_free(config->default_certs_by_type.certs[i]);
-        }
+    /* We track certificate ownership on the config itself because a config
+     * CANNOT use a combination of owned and unowned chains.
+     * If it does, and the unowned chains are freed before the config is,
+     * then iterating over the chains to determine which are owned and need to be freed
+     * will mean also reading the invalid, freed memory of any unowned certificates.
+     * As of now, some tests free chains before the config, so that pattern may also
+     * appear in application code.
+     */
+    if (config->cert_ownership != S2N_LIB_OWNED) {
+        return S2N_SUCCESS;
     }
 
-    return 0;
+    /* Free the cert_chain_and_key since the application has no reference
+     * to it. This is necessary until s2n_config_add_cert_chain_and_key is deprecated. */
+    for (int i = 0; i < S2N_CERT_TYPE_COUNT; i++) {
+        s2n_cert_chain_and_key_free(config->default_certs_by_type.certs[i]);
+        config->default_certs_by_type.certs[i] = NULL;
+    }
+
+    config->cert_ownership = S2N_NOT_OWNED;
+    return S2N_SUCCESS;
 }
 
 int s2n_config_free_dhparams(struct s2n_config *config)
@@ -331,7 +340,7 @@ int s2n_config_free_dhparams(struct s2n_config *config)
         POSIX_GUARD(s2n_dh_params_free(config->dhparams));
     }
 
-    POSIX_GUARD(s2n_free_object((uint8_t **)&config->dhparams, sizeof(struct s2n_dh_params)));
+    POSIX_GUARD(s2n_free_object((uint8_t **) &config->dhparams, sizeof(struct s2n_dh_params)));
     return 0;
 }
 
@@ -347,7 +356,7 @@ int s2n_config_free(struct s2n_config *config)
 {
     s2n_config_cleanup(config);
 
-    POSIX_GUARD(s2n_free_object((uint8_t **)&config, sizeof(struct s2n_config)));
+    POSIX_GUARD(s2n_free_object((uint8_t **) &config, sizeof(struct s2n_config)));
     return 0;
 }
 
@@ -424,13 +433,17 @@ int s2n_config_set_max_cert_chain_depth(struct s2n_config *config, uint16_t max_
     return 0;
 }
 
-
 int s2n_config_set_status_request_type(struct s2n_config *config, s2n_status_request_type type)
 {
     S2N_ERROR_IF(type == S2N_STATUS_REQUEST_OCSP && !s2n_x509_ocsp_stapling_supported(), S2N_ERR_OCSP_NOT_SUPPORTED);
 
     POSIX_ENSURE_REF(config);
-    config->status_request_type = type;
+    config->ocsp_status_requested_by_user = (type == S2N_STATUS_REQUEST_OCSP);
+
+    /* Reset the ocsp_status_requested_by_s2n flag if OCSP status requests were disabled. */
+    if (type == S2N_STATUS_REQUEST_NONE) {
+        config->ocsp_status_requested_by_s2n = false;
+    }
 
     return 0;
 }
@@ -460,25 +473,13 @@ int s2n_config_set_verification_ca_location(struct s2n_config *config, const cha
     int err_code = s2n_x509_trust_store_from_ca_file(&config->trust_store, ca_pem_filename, ca_dir);
 
     if (!err_code) {
-        config->status_request_type = s2n_x509_ocsp_stapling_supported() ? S2N_STATUS_REQUEST_OCSP : S2N_STATUS_REQUEST_NONE;
+        config->ocsp_status_requested_by_s2n = s2n_x509_ocsp_stapling_supported() ? S2N_STATUS_REQUEST_OCSP : S2N_STATUS_REQUEST_NONE;
     }
 
     return err_code;
 }
 
-/* Deprecated. Superseded by s2n_config_add_cert_chain_and_key_to_store */
-int s2n_config_add_cert_chain_and_key(struct s2n_config *config, const char *cert_chain_pem, const char *private_key_pem)
-{
-    struct s2n_cert_chain_and_key *chain_and_key;
-    POSIX_ENSURE_REF(chain_and_key = s2n_cert_chain_and_key_new());
-    POSIX_GUARD(s2n_cert_chain_and_key_load_pem(chain_and_key, cert_chain_pem, private_key_pem));
-    POSIX_GUARD(s2n_config_add_cert_chain_and_key_to_store(config, chain_and_key));
-    config->cert_allocated = 1;
-
-    return 0;
-}
-
-int s2n_config_add_cert_chain_and_key_to_store(struct s2n_config *config, struct s2n_cert_chain_and_key *cert_key_pair)
+static int s2n_config_add_cert_chain_and_key_impl(struct s2n_config *config, struct s2n_cert_chain_and_key *cert_key_pair)
 {
     POSIX_ENSURE_REF(config->domain_name_to_cert_map);
     POSIX_ENSURE_REF(cert_key_pair);
@@ -491,12 +492,67 @@ int s2n_config_add_cert_chain_and_key_to_store(struct s2n_config *config, struct
          * default, etc. */
         if (config->default_certs_by_type.certs[cert_type] == NULL) {
             config->default_certs_by_type.certs[cert_type] = cert_key_pair;
+        } else {
+            /* Because library-owned certificates are tracked and cleaned up via the
+             * default_certs_by_type mapping, library-owned chains MUST be set as the default
+             * to avoid a memory leak. If they're not the default, they're not freed.
+             */
+            POSIX_ENSURE(config->cert_ownership != S2N_LIB_OWNED,
+                    S2N_ERR_MULTIPLE_DEFAULT_CERTIFICATES_PER_AUTH_TYPE);
         }
     }
 
     if (s2n_pkey_check_key_exists(cert_key_pair->private_key) != S2N_SUCCESS) {
         config->no_signing_key = true;
     }
+
+    return S2N_SUCCESS;
+}
+
+/* Deprecated. Superseded by s2n_config_add_cert_chain_and_key_to_store */
+int s2n_config_add_cert_chain_and_key(struct s2n_config *config, const char *cert_chain_pem, const char *private_key_pem)
+{
+    POSIX_ENSURE_REF(config);
+    POSIX_ENSURE(config->cert_ownership != S2N_APP_OWNED, S2N_ERR_CERT_OWNERSHIP);
+
+    DEFER_CLEANUP(struct s2n_cert_chain_and_key *chain_and_key = s2n_cert_chain_and_key_new(),
+            s2n_cert_chain_and_key_ptr_free);
+    POSIX_ENSURE_REF(chain_and_key);
+    POSIX_GUARD(s2n_cert_chain_and_key_load_pem(chain_and_key, cert_chain_pem, private_key_pem));
+    POSIX_GUARD(s2n_config_add_cert_chain_and_key_impl(config, chain_and_key));
+    config->cert_ownership = S2N_LIB_OWNED;
+
+    ZERO_TO_DISABLE_DEFER_CLEANUP(chain_and_key);
+    return S2N_SUCCESS;
+}
+
+/* Only used in the Rust bindings. Superseded by s2n_config_add_cert_chain_and_key_to_store */
+int s2n_config_add_cert_chain(struct s2n_config *config,
+        uint8_t *cert_chain_pem, uint32_t cert_chain_pem_size)
+{
+    POSIX_ENSURE_REF(config);
+    POSIX_ENSURE(config->cert_ownership != S2N_APP_OWNED, S2N_ERR_CERT_OWNERSHIP);
+
+    DEFER_CLEANUP(struct s2n_cert_chain_and_key *chain_and_key = s2n_cert_chain_and_key_new(),
+            s2n_cert_chain_and_key_ptr_free);
+    POSIX_ENSURE_REF(chain_and_key);
+    POSIX_GUARD(s2n_cert_chain_and_key_load_public_pem_bytes(chain_and_key,
+            cert_chain_pem, cert_chain_pem_size));
+    POSIX_GUARD(s2n_config_add_cert_chain_and_key_impl(config, chain_and_key));
+    config->cert_ownership = S2N_LIB_OWNED;
+
+    ZERO_TO_DISABLE_DEFER_CLEANUP(chain_and_key);
+    return S2N_SUCCESS;
+}
+
+int s2n_config_add_cert_chain_and_key_to_store(struct s2n_config *config, struct s2n_cert_chain_and_key *cert_key_pair)
+{
+    POSIX_ENSURE_REF(config);
+    POSIX_ENSURE(config->cert_ownership != S2N_LIB_OWNED, S2N_ERR_CERT_OWNERSHIP);
+
+    POSIX_ENSURE_REF(cert_key_pair);
+    POSIX_GUARD(s2n_config_add_cert_chain_and_key_impl(config, cert_key_pair));
+    config->cert_ownership = S2N_APP_OWNED;
 
     return S2N_SUCCESS;
 }
@@ -510,27 +566,39 @@ int s2n_config_set_async_pkey_callback(struct s2n_config *config, s2n_async_pkey
     return S2N_SUCCESS;
 }
 
-int s2n_config_clear_default_certificates(struct s2n_config *config)
+static int s2n_config_clear_default_certificates(struct s2n_config *config)
 {
     POSIX_ENSURE_REF(config);
+
+    /* Clearing library-owned chains would lead to a memory leak.
+     * See s2n_config_free_cert_chain_and_key.
+     */
+    POSIX_ENSURE(config->cert_ownership != S2N_LIB_OWNED, S2N_ERR_CERT_OWNERSHIP);
+
     for (int i = 0; i < S2N_CERT_TYPE_COUNT; i++) {
         config->default_certs_by_type.certs[i] = NULL;
     }
+    config->cert_ownership = S2N_NOT_OWNED;
     return 0;
 }
 
 int s2n_config_set_cert_chain_and_key_defaults(struct s2n_config *config,
-                                               struct s2n_cert_chain_and_key **cert_key_pairs,
-                                               uint32_t num_cert_key_pairs)
+        struct s2n_cert_chain_and_key **cert_key_pairs,
+        uint32_t num_cert_key_pairs)
 {
     POSIX_ENSURE_REF(config);
     POSIX_ENSURE_REF(cert_key_pairs);
     S2N_ERROR_IF(num_cert_key_pairs < 1 || num_cert_key_pairs > S2N_CERT_TYPE_COUNT,
             S2N_ERR_NUM_DEFAULT_CERTIFICATES);
 
+    /* This method will set application-owned chains, so we must not already be using
+     * any library owned chains. See s2n_config_free_cert_chain_and_key.
+     */
+    POSIX_ENSURE(config->cert_ownership != S2N_LIB_OWNED, S2N_ERR_CERT_OWNERSHIP);
+
     /* Validate certs being set before clearing auto-chosen defaults or previously set defaults */
-    struct certs_by_type new_defaults = {{ 0 }};
-    for (uint32_t i = 0; i < num_cert_key_pairs; i++) {
+    struct certs_by_type new_defaults = { { 0 } };
+    for (size_t i = 0; i < num_cert_key_pairs; i++) {
         POSIX_ENSURE_REF(cert_key_pairs[i]);
         s2n_pkey_type cert_type = s2n_cert_chain_and_key_get_pkey_type(cert_key_pairs[i]);
         S2N_ERROR_IF(new_defaults.certs[cert_type] != NULL, S2N_ERR_MULTIPLE_DEFAULT_CERTIFICATES_PER_AUTH_TYPE);
@@ -538,26 +606,27 @@ int s2n_config_set_cert_chain_and_key_defaults(struct s2n_config *config,
     }
 
     POSIX_GUARD(s2n_config_clear_default_certificates(config));
-    for (uint32_t i = 0; i < num_cert_key_pairs; i++) {
+    for (size_t i = 0; i < num_cert_key_pairs; i++) {
         s2n_pkey_type cert_type = s2n_cert_chain_and_key_get_pkey_type(cert_key_pairs[i]);
         config->is_rsa_cert_configured |= (cert_type == S2N_PKEY_TYPE_RSA);
         config->default_certs_by_type.certs[cert_type] = cert_key_pairs[i];
     }
 
     config->default_certs_are_explicit = 1;
+    config->cert_ownership = S2N_APP_OWNED;
     return 0;
 }
 
 int s2n_config_add_dhparams(struct s2n_config *config, const char *dhparams_pem)
 {
-    DEFER_CLEANUP(struct s2n_stuffer dhparams_in_stuffer = {0}, s2n_stuffer_free);
-    DEFER_CLEANUP(struct s2n_stuffer dhparams_out_stuffer = {0}, s2n_stuffer_free);
-    struct s2n_blob dhparams_blob = {0};
-    struct s2n_blob mem = {0};
+    DEFER_CLEANUP(struct s2n_stuffer dhparams_in_stuffer = { 0 }, s2n_stuffer_free);
+    DEFER_CLEANUP(struct s2n_stuffer dhparams_out_stuffer = { 0 }, s2n_stuffer_free);
+    struct s2n_blob dhparams_blob = { 0 };
+    struct s2n_blob mem = { 0 };
 
     /* Allocate the memory for the chain and key struct */
     POSIX_GUARD(s2n_alloc(&mem, sizeof(struct s2n_dh_params)));
-    config->dhparams = (struct s2n_dh_params *)(void *)mem.data;
+    config->dhparams = (struct s2n_dh_params *) (void *) mem.data;
 
     if (s2n_stuffer_alloc_ro_from_string(&dhparams_in_stuffer, dhparams_pem) != S2N_SUCCESS) {
         s2n_free(&mem);
@@ -580,7 +649,7 @@ int s2n_config_add_dhparams(struct s2n_config *config, const char *dhparams_pem)
     return 0;
 }
 
-extern int s2n_config_set_wall_clock(struct s2n_config *config, s2n_clock_time_nanoseconds clock_fn, void *ctx)
+int s2n_config_set_wall_clock(struct s2n_config *config, s2n_clock_time_nanoseconds clock_fn, void *ctx)
 {
     POSIX_ENSURE_REF(clock_fn);
 
@@ -590,7 +659,7 @@ extern int s2n_config_set_wall_clock(struct s2n_config *config, s2n_clock_time_n
     return 0;
 }
 
-extern int s2n_config_set_monotonic_clock(struct s2n_config *config, s2n_clock_time_nanoseconds clock_fn, void *ctx)
+int s2n_config_set_monotonic_clock(struct s2n_config *config, s2n_clock_time_nanoseconds clock_fn, void *ctx)
 {
     POSIX_ENSURE_REF(clock_fn);
 
@@ -639,16 +708,15 @@ int s2n_config_set_extension_data(struct s2n_config *config, s2n_tls_extension_t
     }
     struct s2n_cert_chain_and_key *config_chain_and_key = s2n_config_get_single_default_cert(config);
     POSIX_ENSURE_REF(config_chain_and_key);
+    POSIX_ENSURE(config->cert_ownership == S2N_LIB_OWNED, S2N_ERR_CERT_OWNERSHIP);
 
     switch (type) {
         case S2N_EXTENSION_CERTIFICATE_TRANSPARENCY:
-            {
-                POSIX_GUARD(s2n_cert_chain_and_key_set_sct_list(config_chain_and_key, data, length));
-            } break;
+            POSIX_GUARD(s2n_cert_chain_and_key_set_sct_list(config_chain_and_key, data, length));
+            break;
         case S2N_EXTENSION_OCSP_STAPLING:
-            {
-                POSIX_GUARD(s2n_cert_chain_and_key_set_ocsp_data(config_chain_and_key, data, length));
-            } break;
+            POSIX_GUARD(s2n_cert_chain_and_key_set_ocsp_data(config_chain_and_key, data, length));
+            break;
         default:
             POSIX_BAIL(S2N_ERR_UNRECOGNIZED_EXTENSION);
     }
@@ -668,8 +736,7 @@ int s2n_config_set_client_hello_cb(struct s2n_config *config, s2n_client_hello_f
 int s2n_config_set_client_hello_cb_mode(struct s2n_config *config, s2n_client_hello_cb_mode cb_mode)
 {
     POSIX_ENSURE_REF(config);
-    POSIX_ENSURE(cb_mode == S2N_CLIENT_HELLO_CB_BLOCKING ||
-            cb_mode == S2N_CLIENT_HELLO_CB_NONBLOCKING, S2N_ERR_INVALID_STATE);
+    POSIX_ENSURE(cb_mode == S2N_CLIENT_HELLO_CB_BLOCKING || cb_mode == S2N_CLIENT_HELLO_CB_NONBLOCKING, S2N_ERR_INVALID_STATE);
 
     config->client_hello_cb_mode = cb_mode;
     return S2N_SUCCESS;
@@ -696,7 +763,7 @@ int s2n_config_accept_max_fragment_length(struct s2n_config *config)
 }
 
 int s2n_config_set_session_state_lifetime(struct s2n_config *config,
-                                          uint64_t lifetime_in_secs)
+        uint64_t lifetime_in_secs)
 {
     POSIX_ENSURE_REF(config);
 
@@ -737,8 +804,7 @@ int s2n_config_set_session_cache_onoff(struct s2n_config *config, uint8_t enable
     if (enabled && config->cache_store && config->cache_retrieve && config->cache_delete) {
         POSIX_GUARD(s2n_config_init_session_ticket_keys(config));
         config->use_session_cache = 1;
-    }
-    else {
+    } else {
         if (!config->use_tickets) {
             POSIX_GUARD(s2n_config_free_session_ticket_keys(config));
         }
@@ -748,7 +814,7 @@ int s2n_config_set_session_cache_onoff(struct s2n_config *config, uint8_t enable
 }
 
 int s2n_config_set_ticket_encrypt_decrypt_key_lifetime(struct s2n_config *config,
-                                                       uint64_t lifetime_in_secs)
+        uint64_t lifetime_in_secs)
 {
     POSIX_ENSURE_REF(config);
 
@@ -757,7 +823,7 @@ int s2n_config_set_ticket_encrypt_decrypt_key_lifetime(struct s2n_config *config
 }
 
 int s2n_config_set_ticket_decrypt_key_lifetime(struct s2n_config *config,
-                                               uint64_t lifetime_in_secs)
+        uint64_t lifetime_in_secs)
 {
     POSIX_ENSURE_REF(config);
 
@@ -766,9 +832,9 @@ int s2n_config_set_ticket_decrypt_key_lifetime(struct s2n_config *config,
 }
 
 int s2n_config_add_ticket_crypto_key(struct s2n_config *config,
-                                     const uint8_t *name, uint32_t name_len,
-                                     uint8_t *key, uint32_t key_len,
-                                     uint64_t intro_time_in_seconds_from_epoch)
+        const uint8_t *name, uint32_t name_len,
+        uint8_t *key, uint32_t key_len,
+        uint64_t intro_time_in_seconds_from_epoch)
 {
     POSIX_ENSURE_REF(config);
     POSIX_ENSURE_REF(name);
@@ -781,32 +847,45 @@ int s2n_config_add_ticket_crypto_key(struct s2n_config *config,
 
     POSIX_GUARD(s2n_config_wipe_expired_ticket_crypto_keys(config, -1));
 
-    S2N_ERROR_IF(key_len == 0, S2N_ERR_INVALID_TICKET_KEY_LENGTH);
+    POSIX_ENSURE(key_len != 0, S2N_ERR_INVALID_TICKET_KEY_LENGTH);
 
     uint32_t ticket_keys_len = 0;
     POSIX_GUARD_RESULT(s2n_set_len(config->ticket_keys, &ticket_keys_len));
-    S2N_ERROR_IF(ticket_keys_len >= S2N_MAX_TICKET_KEYS, S2N_ERR_TICKET_KEY_LIMIT);
+    POSIX_ENSURE(ticket_keys_len < S2N_MAX_TICKET_KEYS, S2N_ERR_TICKET_KEY_LIMIT);
 
-    S2N_ERROR_IF(name_len == 0 || name_len > S2N_TICKET_KEY_NAME_LEN || s2n_find_ticket_key(config, name), S2N_ERR_INVALID_TICKET_KEY_NAME_OR_NAME_LENGTH);
+    POSIX_ENSURE(name_len != 0, S2N_ERR_INVALID_TICKET_KEY_NAME_OR_NAME_LENGTH);
+    POSIX_ENSURE(name_len <= S2N_TICKET_KEY_NAME_LEN, S2N_ERR_INVALID_TICKET_KEY_NAME_OR_NAME_LENGTH);
 
-    uint8_t output_pad[S2N_AES256_KEY_LEN + S2N_TICKET_AAD_IMPLICIT_LEN];
-    struct s2n_blob out_key = { .data = output_pad, .size = sizeof(output_pad) };
-    struct s2n_blob in_key = { .data = key, .size = key_len };
-    struct s2n_blob salt = { .size = 0 };
-    struct s2n_blob info = { .size = 0 };
+    /* Copy the name into a zero-padded array. */
+    /* This ensures that all ticket names are equal in length, as the serialized name is fixed length */
+    uint8_t name_data[S2N_TICKET_KEY_NAME_LEN] = { 0 };
+    POSIX_CHECKED_MEMCPY(name_data, name, name_len);
 
-    struct s2n_ticket_key *session_ticket_key;
-    DEFER_CLEANUP(struct s2n_blob allocator = {0}, s2n_free);
+    /* ensure the ticket name is not already present */
+    POSIX_ENSURE(s2n_find_ticket_key(config, name_data) == NULL, S2N_ERR_INVALID_TICKET_KEY_NAME_OR_NAME_LENGTH);
+
+    uint8_t output_pad[S2N_AES256_KEY_LEN + S2N_TICKET_AAD_IMPLICIT_LEN] = { 0 };
+    struct s2n_blob out_key = { 0 };
+    POSIX_GUARD(s2n_blob_init(&out_key, output_pad, s2n_array_len(output_pad)));
+    struct s2n_blob in_key = { 0 };
+    POSIX_GUARD(s2n_blob_init(&in_key, key, key_len));
+    struct s2n_blob salt = { 0 };
+    POSIX_GUARD(s2n_blob_init(&salt, NULL, 0));
+    struct s2n_blob info = { 0 };
+    POSIX_GUARD(s2n_blob_init(&info, NULL, 0));
+
+    struct s2n_ticket_key *session_ticket_key = { 0 };
+    DEFER_CLEANUP(struct s2n_blob allocator = { 0 }, s2n_free);
     POSIX_GUARD(s2n_alloc(&allocator, sizeof(struct s2n_ticket_key)));
     session_ticket_key = (struct s2n_ticket_key *) (void *) allocator.data;
 
-    DEFER_CLEANUP(struct s2n_hmac_state hmac = {0}, s2n_hmac_free);
+    DEFER_CLEANUP(struct s2n_hmac_state hmac = { 0 }, s2n_hmac_free);
 
     POSIX_GUARD(s2n_hmac_new(&hmac));
     POSIX_GUARD(s2n_hkdf(&hmac, S2N_HMAC_SHA256, &salt, &in_key, &info, &out_key));
 
-    DEFER_CLEANUP(struct s2n_hash_state hash = {0}, s2n_hash_free);
-    uint8_t hash_output[SHA_DIGEST_LENGTH];
+    DEFER_CLEANUP(struct s2n_hash_state hash = { 0 }, s2n_hash_free);
+    uint8_t hash_output[SHA_DIGEST_LENGTH] = { 0 };
 
     POSIX_GUARD(s2n_hash_new(&hash));
     POSIX_GUARD(s2n_hash_init(&hash, S2N_HASH_SHA1));
@@ -822,14 +901,14 @@ int s2n_config_add_ticket_crypto_key(struct s2n_config *config,
     /* Insert hash key into a sorted array at known index */
     POSIX_GUARD_RESULT(s2n_set_add(config->ticket_key_hashes, hash_output));
 
-    POSIX_CHECKED_MEMCPY(session_ticket_key->key_name, name, S2N_TICKET_KEY_NAME_LEN);
+    POSIX_CHECKED_MEMCPY(session_ticket_key->key_name, name_data, s2n_array_len(name_data));
     POSIX_CHECKED_MEMCPY(session_ticket_key->aes_key, out_key.data, S2N_AES256_KEY_LEN);
     out_key.data = output_pad + S2N_AES256_KEY_LEN;
     POSIX_CHECKED_MEMCPY(session_ticket_key->implicit_aad, out_key.data, S2N_TICKET_AAD_IMPLICIT_LEN);
 
     if (intro_time_in_seconds_from_epoch == 0) {
-        uint64_t now;
-        POSIX_GUARD(config->wall_clock(config->sys_clock_ctx, &now));
+        uint64_t now = 0;
+        POSIX_GUARD_RESULT(s2n_config_wall_clock(config, &now));
         session_ticket_key->intro_timestamp = now;
     } else {
         session_ticket_key->intro_timestamp = (intro_time_in_seconds_from_epoch * ONE_SEC_IN_NANOS);
@@ -887,7 +966,8 @@ int s2n_config_set_psk_selection_callback(struct s2n_config *config, s2n_psk_sel
     return S2N_SUCCESS;
 }
 
-int s2n_config_set_key_log_cb(struct s2n_config *config, s2n_key_log_fn callback, void *ctx) {
+int s2n_config_set_key_log_cb(struct s2n_config *config, s2n_key_log_fn callback, void *ctx)
+{
     POSIX_ENSURE_MUT(config);
 
     config->key_log_cb = callback;
@@ -896,10 +976,11 @@ int s2n_config_set_key_log_cb(struct s2n_config *config, s2n_key_log_fn callback
     return S2N_SUCCESS;
 }
 
-int s2n_config_set_async_pkey_validation_mode(struct s2n_config *config, s2n_async_pkey_validation_mode mode) {
+int s2n_config_set_async_pkey_validation_mode(struct s2n_config *config, s2n_async_pkey_validation_mode mode)
+{
     POSIX_ENSURE_REF(config);
 
-    switch(mode) {
+    switch (mode) {
         case S2N_ASYNC_PKEY_VALIDATION_FAST:
         case S2N_ASYNC_PKEY_VALIDATION_STRICT:
             config->async_pkey_validation_mode = mode;
@@ -909,7 +990,8 @@ int s2n_config_set_async_pkey_validation_mode(struct s2n_config *config, s2n_asy
     POSIX_BAIL(S2N_ERR_INVALID_ARGUMENT);
 }
 
-int s2n_config_set_ctx(struct s2n_config *config, void *ctx) {
+int s2n_config_set_ctx(struct s2n_config *config, void *ctx)
+{
     POSIX_ENSURE_REF(config);
 
     config->context = ctx;
@@ -917,7 +999,8 @@ int s2n_config_set_ctx(struct s2n_config *config, void *ctx) {
     return S2N_SUCCESS;
 }
 
-int s2n_config_get_ctx(struct s2n_config *config, void **ctx) {
+int s2n_config_get_ctx(struct s2n_config *config, void **ctx)
+{
     POSIX_ENSURE_REF(config);
     POSIX_ENSURE_REF(ctx);
 
@@ -926,15 +1009,75 @@ int s2n_config_get_ctx(struct s2n_config *config, void **ctx) {
     return S2N_SUCCESS;
 }
 
+int s2n_config_set_send_buffer_size(struct s2n_config *config, uint32_t size)
+{
+    POSIX_ENSURE_REF(config);
+    POSIX_ENSURE(size >= S2N_MIN_SEND_BUFFER_SIZE, S2N_ERR_INVALID_ARGUMENT);
+    config->send_buffer_size_override = size;
+    return S2N_SUCCESS;
+}
+
+int s2n_config_set_verify_after_sign(struct s2n_config *config, s2n_verify_after_sign mode)
+{
+    POSIX_ENSURE_REF(config);
+    switch (mode) {
+        case S2N_VERIFY_AFTER_SIGN_DISABLED:
+            config->verify_after_sign = false;
+            break;
+        case S2N_VERIFY_AFTER_SIGN_ENABLED:
+            config->verify_after_sign = true;
+            break;
+        default:
+            POSIX_BAIL(S2N_ERR_INVALID_ARGUMENT);
+    }
+    return S2N_SUCCESS;
+}
+
 /*
- * Set the client_hello callback behavior to polling.
- *
- * Polling means that the callback function can be called multiple times.
+ *= https://tools.ietf.org/rfc/rfc5746#5
+ *# TLS implementations SHOULD provide a mechanism to disable and enable
+ *# renegotiation.
  */
-int s2n_config_client_hello_cb_enable_poll(struct s2n_config *config) {
+int s2n_config_set_renegotiate_request_cb(struct s2n_config *config, s2n_renegotiate_request_cb cb, void *ctx)
+{
+    POSIX_ENSURE_REF(config);
+    config->renegotiate_request_cb = cb;
+    config->renegotiate_request_ctx = ctx;
+    return S2N_SUCCESS;
+}
+
+int s2n_config_set_npn(struct s2n_config *config, bool enable)
+{
     POSIX_ENSURE_REF(config);
 
-    config->client_hello_cb_enable_poll = 1;
+    config->npn_supported = enable;
+
+    return S2N_SUCCESS;
+}
+
+/*
+ * Wrapper for wall_clock callback. This wrapper will ensure right return of s2n_errno everytime wall_clock
+ * callback is called.
+ */
+S2N_RESULT s2n_config_wall_clock(struct s2n_config *config, uint64_t *output)
+{
+    RESULT_ENSURE(config->wall_clock(config->sys_clock_ctx, output) >= S2N_SUCCESS, S2N_ERR_CANCELLED);
+    return S2N_RESULT_OK;
+}
+
+int s2n_config_set_crl_lookup_cb(struct s2n_config *config, s2n_crl_lookup_callback cb, void *ctx)
+{
+    POSIX_ENSURE_REF(config);
+    config->crl_lookup_cb = cb;
+    config->crl_lookup_ctx = ctx;
+    return S2N_SUCCESS;
+}
+
+int s2n_config_set_recv_multi_record(struct s2n_config *config, bool enabled)
+{
+    POSIX_ENSURE_REF(config);
+
+    config->recv_multi_record = enabled;
 
     return S2N_SUCCESS;
 }

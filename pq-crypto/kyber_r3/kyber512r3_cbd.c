@@ -2,6 +2,8 @@
 #include "kyber512r3_params.h"
 #include "kyber512r3_cbd.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
 * Name:        load32_littleendian
 *

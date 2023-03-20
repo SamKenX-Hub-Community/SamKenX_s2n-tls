@@ -13,14 +13,15 @@
  * permissions and limitations under the License.
  */
 
-#include "error/s2n_errno.h"
+#include "crypto/s2n_evp_signing.h"
 
 #include "crypto/s2n_evp.h"
-#include "crypto/s2n_evp_signing.h"
 #include "crypto/s2n_pkey.h"
 #include "crypto/s2n_rsa_pss.h"
-
+#include "error/s2n_errno.h"
 #include "utils/s2n_safety.h"
+
+DEFINE_POINTER_CLEANUP_FUNC(EVP_PKEY_CTX *, EVP_PKEY_CTX_free);
 
 /*
  * FIPS 140-3 requires that we don't pass raw digest bytes to the libcrypto signing methods.
@@ -75,7 +76,7 @@ S2N_RESULT s2n_evp_signing_set_pkey_overrides(struct s2n_pkey *pkey)
 
 static S2N_RESULT s2n_evp_signing_validate_hash_alg(s2n_signature_algorithm sig_alg, s2n_hash_algorithm hash_alg)
 {
-    switch(hash_alg) {
+    switch (hash_alg) {
         case S2N_HASH_NONE:
         case S2N_HASH_MD5:
             /* MD5 alone is never supported */
@@ -105,7 +106,7 @@ int s2n_evp_sign(const struct s2n_pkey *priv, s2n_signature_algorithm sig_alg,
     POSIX_ENSURE(s2n_evp_signing_supported(), S2N_ERR_HASH_NOT_READY);
     POSIX_GUARD_RESULT(s2n_evp_signing_validate_hash_alg(sig_alg, hash_state->alg));
 
-    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new(priv->pkey, NULL);
+    DEFER_CLEANUP(EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new(priv->pkey, NULL), EVP_PKEY_CTX_free_pointer);
     POSIX_ENSURE_REF(pctx);
     POSIX_GUARD_OSSL(EVP_PKEY_sign_init(pctx), S2N_ERR_PKEY_CTX_INIT);
     POSIX_GUARD_OSSL(S2N_EVP_PKEY_CTX_set_signature_md(pctx, s2n_hash_alg_to_evp_md(hash_state->alg)), S2N_ERR_PKEY_CTX_INIT);
@@ -123,6 +124,7 @@ int s2n_evp_sign(const struct s2n_pkey *priv, s2n_signature_algorithm sig_alg,
     POSIX_GUARD_OSSL(EVP_DigestSignFinal(ctx, signature->data, &signature_size), S2N_ERR_SIGN);
     POSIX_ENSURE(signature_size <= signature->size, S2N_ERR_SIZE_MISMATCH);
     signature->size = signature_size;
+    POSIX_GUARD_RESULT(s2n_evp_md_ctx_set_pkey_ctx(ctx, NULL));
     return S2N_SUCCESS;
 }
 
@@ -135,7 +137,7 @@ int s2n_evp_verify(const struct s2n_pkey *pub, s2n_signature_algorithm sig_alg,
     POSIX_ENSURE(s2n_evp_signing_supported(), S2N_ERR_HASH_NOT_READY);
     POSIX_GUARD_RESULT(s2n_evp_signing_validate_hash_alg(sig_alg, hash_state->alg));
 
-    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new(pub->pkey, NULL);
+    DEFER_CLEANUP(EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new(pub->pkey, NULL), EVP_PKEY_CTX_free_pointer);
     POSIX_ENSURE_REF(pctx);
     POSIX_GUARD_OSSL(EVP_PKEY_verify_init(pctx), S2N_ERR_PKEY_CTX_INIT);
     POSIX_GUARD_OSSL(S2N_EVP_PKEY_CTX_set_signature_md(pctx, s2n_hash_alg_to_evp_md(hash_state->alg)), S2N_ERR_PKEY_CTX_INIT);
@@ -150,5 +152,6 @@ int s2n_evp_verify(const struct s2n_pkey *pub, s2n_signature_algorithm sig_alg,
     POSIX_GUARD_RESULT(s2n_evp_md_ctx_set_pkey_ctx(ctx, pctx));
 
     POSIX_GUARD_OSSL(EVP_DigestVerifyFinal(ctx, signature->data, signature->size), S2N_ERR_VERIFY_SIGNATURE);
+    POSIX_GUARD_RESULT(s2n_evp_md_ctx_set_pkey_ctx(ctx, NULL));
     return S2N_SUCCESS;
 }

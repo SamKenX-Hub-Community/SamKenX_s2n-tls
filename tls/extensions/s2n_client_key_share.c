@@ -14,15 +14,15 @@
  */
 
 #include "tls/extensions/s2n_client_key_share.h"
-#include "tls/extensions/s2n_key_share.h"
-#include "tls/s2n_security_policies.h"
-#include "tls/s2n_kem_preferences.h"
 
 #include "error/s2n_errno.h"
-#include "stuffer/s2n_stuffer.h"
-#include "utils/s2n_safety.h"
-#include "tls/s2n_tls13.h"
 #include "pq-crypto/s2n_pq.h"
+#include "stuffer/s2n_stuffer.h"
+#include "tls/extensions/s2n_key_share.h"
+#include "tls/s2n_kem_preferences.h"
+#include "tls/s2n_security_policies.h"
+#include "tls/s2n_tls13.h"
+#include "utils/s2n_safety.h"
 
 /**
  * Specified in https://tools.ietf.org/html/rfc8446#section-4.2.8
@@ -84,6 +84,13 @@ static int s2n_generate_default_ecc_key_share(struct s2n_connection *conn, struc
             POSIX_GUARD(s2n_ecc_evp_params_free(client_params));
         }
 
+        /**
+         *= https://tools.ietf.org/rfc/rfc8446#4.2.8
+         *# Otherwise, when sending the new ClientHello, the client MUST
+         *# replace the original "key_share" extension with one containing only a
+         *# new KeyShareEntry for the group indicated in the selected_group field
+         *# of the triggering HelloRetryRequest.
+         **/
         client_params->negotiated_curve = server_curve;
     } else {
         client_params->negotiated_curve = ecc_pref->ecc_curves[0];
@@ -104,24 +111,18 @@ static int s2n_generate_pq_hybrid_key_share(struct s2n_stuffer *out, struct s2n_
     const struct s2n_kem_group *kem_group = kem_group_params->kem_group;
     POSIX_ENSURE_REF(kem_group);
 
-    /* The structure of the PQ share is:
-     *    IANA ID (2 bytes)
-     * || total share size (2 bytes)
-     * || size of ECC key share (2 bytes)
-     * || ECC key share (variable bytes)
-     * || size of PQ key share (2 bytes)
-     * || PQ key share (variable bytes) */
     POSIX_GUARD(s2n_stuffer_write_uint16(out, kem_group->iana_id));
 
-    struct s2n_stuffer_reservation total_share_size = {0};
+    struct s2n_stuffer_reservation total_share_size = { 0 };
     POSIX_GUARD(s2n_stuffer_reserve_uint16(out, &total_share_size));
 
     struct s2n_ecc_evp_params *ecc_params = &kem_group_params->ecc_params;
     ecc_params->negotiated_curve = kem_group->curve;
-    POSIX_GUARD_RESULT(s2n_ecdhe_send_public_key(ecc_params, out));
 
     struct s2n_kem_params *kem_params = &kem_group_params->kem_params;
     kem_params->kem = kem_group->kem;
+
+    POSIX_GUARD_RESULT(s2n_ecdhe_send_public_key(ecc_params, out, kem_params->len_prefixed));
     POSIX_GUARD(s2n_kem_send_public_key(out, kem_params));
 
     POSIX_GUARD(s2n_stuffer_write_vector_size(&total_share_size));
@@ -151,6 +152,7 @@ static int s2n_generate_default_pq_hybrid_key_share(struct s2n_connection *conn,
      * during a retry, or the most preferred share according to local preferences.
      */
     struct s2n_kem_group_params *client_params = &conn->kex_params.client_kem_group_params;
+
     if (s2n_is_hello_retry_handshake(conn)) {
         const struct s2n_kem_group *server_group = conn->kex_params.server_kem_group_params.kem_group;
 
@@ -164,10 +166,19 @@ static int s2n_generate_default_pq_hybrid_key_share(struct s2n_connection *conn,
             POSIX_GUARD(s2n_kem_group_free(client_params));
         }
 
+        /**
+         *= https://tools.ietf.org/rfc/rfc8446#4.2.8
+         *# Otherwise, when sending the new ClientHello, the client MUST
+         *# replace the original "key_share" extension with one containing only a
+         *# new KeyShareEntry for the group indicated in the selected_group field
+         *# of the triggering HelloRetryRequest.
+         **/
         client_params->kem_group = server_group;
     } else {
         client_params->kem_group = kem_pref->tls13_kem_groups[0];
+        client_params->kem_params.len_prefixed = s2n_tls13_client_must_use_hybrid_kem_length_prefix(kem_pref);
     }
+
     POSIX_GUARD(s2n_generate_pq_hybrid_key_share(out, client_params));
 
     return S2N_SUCCESS;
@@ -175,7 +186,17 @@ static int s2n_generate_default_pq_hybrid_key_share(struct s2n_connection *conn,
 
 static int s2n_client_key_share_send(struct s2n_connection *conn, struct s2n_stuffer *out)
 {
-    struct s2n_stuffer_reservation shares_size = {0};
+    if (s2n_is_hello_retry_handshake(conn)) {
+        const struct s2n_ecc_named_curve *server_curve = conn->kex_params.server_ecc_evp_params.negotiated_curve;
+        const struct s2n_ecc_named_curve *client_curve = conn->kex_params.client_ecc_evp_params.negotiated_curve;
+        const struct s2n_kem_group *server_group = conn->kex_params.server_kem_group_params.kem_group;
+        const struct s2n_kem_group *client_group = conn->kex_params.client_kem_group_params.kem_group;
+
+        /* Ensure a new key share will be sent after a hello retry request */
+        POSIX_ENSURE(server_curve != client_curve || server_group != client_group, S2N_ERR_BAD_KEY_SHARE);
+    }
+
+    struct s2n_stuffer_reservation shares_size = { 0 };
     POSIX_GUARD(s2n_stuffer_reserve_uint16(out, &shares_size));
     POSIX_GUARD(s2n_generate_default_pq_hybrid_key_share(conn, out));
     POSIX_GUARD(s2n_generate_default_ecc_key_share(conn, out));
@@ -318,20 +339,33 @@ static int s2n_client_key_share_recv_pq_hybrid(struct s2n_connection *conn, stru
         return S2N_SUCCESS;
     }
 
+    /* The length of the hybrid key share must be one of two possible lengths. Its internal values are either length
+     * prefixed, or they are not. */
+    uint16_t actual_hybrid_share_size = key_share->blob.size;
+    uint16_t unprefixed_hybrid_share_size = kem_group->curve->share_size + kem_group->kem->public_key_length;
+    uint16_t prefixed_hybrid_share_size = (2 * S2N_SIZE_OF_KEY_SHARE_SIZE) + unprefixed_hybrid_share_size;
+
     /* Ignore KEM groups with unexpected overall total share sizes */
-    if (key_share->blob.size != kem_group->client_share_size) {
+    if ((actual_hybrid_share_size != unprefixed_hybrid_share_size) && (actual_hybrid_share_size != prefixed_hybrid_share_size)) {
         return S2N_SUCCESS;
     }
 
-    /* Ignore KEM groups with unexpected ECC share sizes */
-    uint16_t ec_share_size = 0;
-    POSIX_GUARD(s2n_stuffer_read_uint16(key_share, &ec_share_size));
-    if (ec_share_size != kem_group->curve->share_size) {
-        return S2N_SUCCESS;
+    bool is_hybrid_share_length_prefixed = (actual_hybrid_share_size == prefixed_hybrid_share_size);
+
+    if (is_hybrid_share_length_prefixed) {
+        /* Ignore KEM groups with unexpected ECC share sizes */
+        uint16_t ec_share_size = 0;
+        POSIX_GUARD(s2n_stuffer_read_uint16(key_share, &ec_share_size));
+        if (ec_share_size != kem_group->curve->share_size) {
+            return S2N_SUCCESS;
+        }
     }
 
     DEFER_CLEANUP(struct s2n_kem_group_params new_client_params = { 0 }, s2n_kem_group_free);
     new_client_params.kem_group = kem_group;
+
+    /* Need to save whether the client included the length prefix so that we can match their behavior in our response. */
+    new_client_params.kem_params.len_prefixed = is_hybrid_share_length_prefixed;
 
     POSIX_GUARD(s2n_client_key_share_parse_ecc(key_share, kem_group->curve, &new_client_params.ecc_params));
     /* If we were unable to parse the EC portion of the share, negotiated_curve
@@ -377,13 +411,13 @@ static int s2n_client_key_share_recv(struct s2n_connection *conn, struct s2n_stu
     struct s2n_stuffer key_share = { 0 };
 
     uint16_t keyshare_count = 0;
-    while(s2n_stuffer_data_available(extension) > 0) {
+    while (s2n_stuffer_data_available(extension) > 0) {
         POSIX_GUARD(s2n_stuffer_read_uint16(extension, &named_group));
         POSIX_GUARD(s2n_stuffer_read_uint16(extension, &share_size));
         POSIX_ENSURE(s2n_stuffer_data_available(extension) >= share_size, S2N_ERR_BAD_MESSAGE);
 
         POSIX_GUARD(s2n_blob_init(&key_share_blob,
-            s2n_stuffer_raw_read(extension, share_size), share_size));
+                s2n_stuffer_raw_read(extension, share_size), share_size));
         POSIX_GUARD(s2n_stuffer_init(&key_share, &key_share_blob));
         POSIX_GUARD(s2n_stuffer_skip_write(&key_share, share_size));
         keyshare_count++;
@@ -397,8 +431,15 @@ static int s2n_client_key_share_recv(struct s2n_connection *conn, struct s2n_stu
     /* During a retry, the client should only have sent one keyshare */
     POSIX_ENSURE(!s2n_is_hello_retry_handshake(conn) || keyshare_count == 1, S2N_ERR_BAD_MESSAGE);
 
-    /* If there were no matching key shares, then we received an empty key share extension
-     * or we didn't match a key share with a supported group. We should send a retry. */
+    /**
+     * If there were no matching key shares, then we received an empty key share extension
+     * or we didn't match a key share with a supported group. We should send a retry.
+     *
+     *= https://tools.ietf.org/rfc/rfc8446#4.1.1
+     *# If the server selects an (EC)DHE group and the client did not offer a
+     *# compatible "key_share" extension in the initial ClientHello, the
+     *# server MUST respond with a HelloRetryRequest (Section 4.1.4) message.
+     **/
     struct s2n_ecc_evp_params *client_ecc_params = &conn->kex_params.client_ecc_evp_params;
     struct s2n_kem_group_params *client_pq_params = &conn->kex_params.client_kem_group_params;
     if (!client_pq_params->kem_group && !client_ecc_params->negotiated_curve) {
@@ -426,11 +467,6 @@ uint32_t s2n_extensions_client_key_share_size(struct s2n_connection *conn)
     s2n_client_key_share_extension_size += ecc_pref->ecc_curves[0]->share_size;
 
     return s2n_client_key_share_extension_size;
-}
-
-int s2n_extensions_client_key_share_send(struct s2n_connection *conn, struct s2n_stuffer *out)
-{
-    return s2n_extension_send(&s2n_client_key_share_extension, conn, out);
 }
 
 int s2n_extensions_client_key_share_recv(struct s2n_connection *conn, struct s2n_stuffer *extension)

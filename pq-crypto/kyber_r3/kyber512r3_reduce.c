@@ -2,6 +2,8 @@
 #include "kyber512r3_params.h"
 #include "kyber512r3_reduce.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
 * Name:        montgomery_reduce
 *

@@ -38,9 +38,8 @@ git clone --branch OQS-OpenSSL_1_1_1-stable https://github.com/open-quantum-safe
 git clone https://github.com/open-quantum-safe/liboqs.git
 cd liboqs
 
-# As of 2020-07-08, libOQS has migrated to Picnic-v3, but open-quantum-safe/openssl is still using the removed v2 symbols (OQS_SIG_alg_picnic2_L1_FS)
-# Pin to commit before Picnic-v3 was merged into liboqs so that both libraries are compatible with each other.
-git checkout 1b9aecc65672f86487018ee6f9786216578e4e29
+# Use commit that supports Kyber round 3; hybrid draft spec version 5
+git checkout cf6d8a059e446d24e2af06949d83605ae0f4f414
 
 mkdir build && cd build
 cmake -GNinja -DCMAKE_INSTALL_PREFIX=${BUILD_DIR}/openssl/oqs ..
@@ -51,8 +50,8 @@ ninja install
 # Complete the OpenSSL Build
 cd "$BUILD_DIR"/openssl
 
-# Pin to working OQS OpenSSL commit so that a future migration to Picnic-V3 won't break CI.
-git checkout 97242266b4402d21724c62f2005b51feb977ceb1
+# Pin to OQS-OpenSSL commit that is compatible with Kyber round 3; hybrid draft spec version 5 LibOQS implementation
+git checkout 613d1bea7afa23dc11f340e75990cb47d77711e9
 
 if [ "$PLATFORM" == "linux" ]; then
     CONFIGURE="./config -d"

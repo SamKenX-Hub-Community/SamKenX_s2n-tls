@@ -15,12 +15,12 @@
 
 #pragma once
 
-#include "api/s2n.h"
 #include <strings.h>
 
+#include "api/s2n.h"
+#include "crypto/s2n_ecc_evp.h"
 #include "crypto/s2n_hash.h"
 #include "crypto/s2n_signature.h"
-#include "crypto/s2n_ecc_evp.h"
 
 struct s2n_signature_scheme {
     uint16_t iana_value;
@@ -34,7 +34,7 @@ struct s2n_signature_scheme {
     struct s2n_ecc_named_curve const *signature_curve;
 };
 
-struct s2n_signature_preferences{
+struct s2n_signature_preferences {
     uint8_t count;
     const struct s2n_signature_scheme *const *signature_schemes;
 };
@@ -77,6 +77,9 @@ extern const struct s2n_signature_preferences s2n_signature_preferences_20140601
 extern const struct s2n_signature_preferences s2n_signature_preferences_20200207;
 extern const struct s2n_signature_preferences s2n_signature_preferences_20201021;
 extern const struct s2n_signature_preferences s2n_signature_preferences_20210816;
+extern const struct s2n_signature_preferences s2n_signature_preferences_rfc9151;
+extern const struct s2n_signature_preferences s2n_certificate_signature_preferences_rfc9151;
+extern const struct s2n_signature_preferences s2n_signature_preferences_default_fips;
 extern const struct s2n_signature_preferences s2n_signature_preferences_null;
 
 extern const struct s2n_signature_preferences s2n_certificate_signature_preferences_20201110;

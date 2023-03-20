@@ -15,147 +15,32 @@
 
 #include "tls/s2n_kem_preferences.h"
 
-/* Extension list for round 1 PQ KEMs, in order of preference */
-const struct s2n_kem *pq_kems_r1[2] = {
-    &s2n_bike1_l1_r1,
-    &s2n_sike_p503_r1,
-};
-
-/* Extension list for round 2 and round 1 PQ KEMs, in order of preference.
- * s2n_sike_p434_r3 is compatible with, and has replaced, s2n_sike_p434_r2. */
-const struct s2n_kem *pq_kems_r2r1[4] = {
-    &s2n_bike1_l1_r2,
-    &s2n_sike_p434_r3,
-    &s2n_bike1_l1_r1,
-    &s2n_sike_p503_r1,
-};
-
-/* s2n_sike_p434_r3 is compatible with, and has replaced, s2n_sike_p434_r2. */
-const struct s2n_kem *pq_kems_r2r1_2020_07[5] = {
-    &s2n_kyber_512_r2,
-    &s2n_bike1_l1_r2,
-    &s2n_sike_p434_r3,
-    &s2n_bike1_l1_r1,
-    &s2n_sike_p503_r1,
-};
-
-const struct s2n_kem *pq_kems_r3r2r1_2021_05[7] = {
+const struct s2n_kem *pq_kems_r3_2021_05[1] = {
     /* Round 3 Algorithms */
     &s2n_kyber_512_r3,
-    &s2n_bike_l1_r3,
-
-    /* Round 2 Algorithms */
-    &s2n_kyber_512_r2,
-    &s2n_bike1_l1_r2,
-    &s2n_sike_p434_r3,
-
-    /* Round 1 Algorithms */
-    &s2n_bike1_l1_r1,
-    &s2n_sike_p503_r1,
 };
 
-/* Extension list for SIKE P503 Round 1 only (for testing) */
-const struct s2n_kem *pq_kems_sike_r1[1] = {
-    &s2n_sike_p503_r1,
-};
-
-/* Extension list for SIKE P434 Round 2 and SIKE P503 Round 1 only (for testing),
- * in order of preference. s2n_sike_p434_r3 is compatible with, and has replaced,
- * s2n_sike_p434_r2. */
-const struct s2n_kem *pq_kems_sike_r2r1[2] = {
-    &s2n_sike_p434_r3,
-    &s2n_sike_p503_r1,
-};
-
-/* sike_p434_r3 has replaced sike_p434_r2 in all KEM groups */
-const struct s2n_kem_group *pq_kem_groups_r2[] = {
+const struct s2n_kem_group *pq_kem_groups_r3[] = {
 #if EVP_APIS_SUPPORTED
-        &s2n_x25519_kyber_512_r2,
-        &s2n_secp256r1_kyber_512_r2,
-        &s2n_x25519_bike1_l1_r2,
-        &s2n_secp256r1_bike1_l1_r2,
-        &s2n_x25519_sike_p434_r3,
-        &s2n_secp256r1_sike_p434_r3,
-#else
-        &s2n_secp256r1_kyber_512_r2,
-        &s2n_secp256r1_bike1_l1_r2,
-        &s2n_secp256r1_sike_p434_r3,
+    &s2n_x25519_kyber_512_r3,
 #endif
-};
-
-
-const struct s2n_kem_group *pq_kem_groups_r3r2[] = {
-#if EVP_APIS_SUPPORTED
-        &s2n_x25519_kyber_512_r3,
-        &s2n_secp256r1_kyber_512_r3,
-        &s2n_x25519_bike_l1_r3,
-        &s2n_secp256r1_bike_l1_r3,
-        &s2n_x25519_kyber_512_r2,
-        &s2n_secp256r1_kyber_512_r2,
-        &s2n_x25519_bike1_l1_r2,
-        &s2n_secp256r1_bike1_l1_r2,
-        &s2n_x25519_sike_p434_r3,
-        &s2n_secp256r1_sike_p434_r3,
-#else
-        &s2n_secp256r1_kyber_512_r3,
-        &s2n_secp256r1_bike_l1_r3,
-        &s2n_secp256r1_kyber_512_r2,
-        &s2n_secp256r1_bike1_l1_r2,
-        &s2n_secp256r1_sike_p434_r3,
-#endif
-};
-
-/* Includes only round 1 PQ KEM params */
-const struct s2n_kem_preferences kem_preferences_kms_pq_tls_1_0_2019_06 = {
-    .kem_count = s2n_array_len(pq_kems_r1),
-    .kems = pq_kems_r1,
-    .tls13_kem_group_count = 0,
-    .tls13_kem_groups = NULL,
-};
-
-/* Includes round 1 and round 2 PQ KEM params. */
-const struct s2n_kem_preferences kem_preferences_kms_pq_tls_1_0_2020_02 = {
-    .kem_count = s2n_array_len(pq_kems_r2r1),
-    .kems = pq_kems_r2r1,
-    .tls13_kem_group_count = 0,
-    .tls13_kem_groups = NULL,
-};
-
-const struct s2n_kem_preferences kem_preferences_kms_pq_tls_1_0_2020_07 = {
-    .kem_count = s2n_array_len(pq_kems_r2r1_2020_07),
-    .kems = pq_kems_r2r1_2020_07,
-    .tls13_kem_group_count = 0,
-    .tls13_kem_groups = NULL,
-};
-
-/* Includes only SIKE round 1 (for integration tests) */
-const struct s2n_kem_preferences kem_preferences_pq_sike_test_tls_1_0_2019_11 = {
-    .kem_count = s2n_array_len(pq_kems_sike_r1),
-    .kems = pq_kems_sike_r1,
-    .tls13_kem_group_count = 0,
-    .tls13_kem_groups = NULL,
-};
-
-/* Includes only SIKE round 1 and round 2 (for integration tests). */
-const struct s2n_kem_preferences kem_preferences_pq_sike_test_tls_1_0_2020_02 = {
-    .kem_count = s2n_array_len(pq_kems_sike_r2r1),
-    .kems = pq_kems_sike_r2r1,
-    .tls13_kem_group_count = 0,
-    .tls13_kem_groups = NULL,
-};
-
-const struct s2n_kem_preferences kem_preferences_pq_tls_1_0_2020_12 = {
-    .kem_count = s2n_array_len(pq_kems_r2r1_2020_07),
-    .kems = pq_kems_r2r1_2020_07,
-    .tls13_kem_group_count = s2n_array_len(pq_kem_groups_r2),
-    .tls13_kem_groups = pq_kem_groups_r2,
+    &s2n_secp256r1_kyber_512_r3,
 };
 
 const struct s2n_kem_preferences kem_preferences_pq_tls_1_0_2021_05 = {
-    .kem_count = s2n_array_len(pq_kems_r3r2r1_2021_05),
-    .kems = pq_kems_r3r2r1_2021_05,
-    .tls13_kem_group_count = s2n_array_len(pq_kem_groups_r3r2),
-    .tls13_kem_groups = pq_kem_groups_r3r2,
+    .kem_count = s2n_array_len(pq_kems_r3_2021_05),
+    .kems = pq_kems_r3_2021_05,
+    .tls13_kem_group_count = s2n_array_len(pq_kem_groups_r3),
+    .tls13_kem_groups = pq_kem_groups_r3,
+    .tls13_pq_hybrid_draft_revision = 0
+};
+
+const struct s2n_kem_preferences kem_preferences_pq_tls_1_0_2023_01 = {
+    .kem_count = s2n_array_len(pq_kems_r3_2021_05),
+    .kems = pq_kems_r3_2021_05,
+    .tls13_kem_group_count = s2n_array_len(pq_kem_groups_r3),
+    .tls13_kem_groups = pq_kem_groups_r3,
+    .tls13_pq_hybrid_draft_revision = 5
 };
 
 const struct s2n_kem_preferences kem_preferences_null = {
@@ -163,11 +48,13 @@ const struct s2n_kem_preferences kem_preferences_null = {
     .kems = NULL,
     .tls13_kem_group_count = 0,
     .tls13_kem_groups = NULL,
+    .tls13_pq_hybrid_draft_revision = 0
 };
 
 /* Determines if query_iana_id corresponds to a tls13_kem_group for these KEM preferences. */
 bool s2n_kem_preferences_includes_tls13_kem_group(const struct s2n_kem_preferences *kem_preferences,
-        uint16_t query_iana_id) {
+        uint16_t query_iana_id)
+{
     if (kem_preferences == NULL) {
         return false;
     }
@@ -179,4 +66,12 @@ bool s2n_kem_preferences_includes_tls13_kem_group(const struct s2n_kem_preferenc
     }
 
     return false;
+}
+
+/* Whether the client must include the length prefix in the PQ TLS 1.3 KEM KeyShares that it sends. Draft 0 of
+ * the PQ TLS 1.3 standard required length prefixing, and drafts 1-5 removed this length prefix. To not break
+ * backwards compatibility, we check what revision of the draft standard is configured to determine whether to send it. */
+bool s2n_tls13_client_must_use_hybrid_kem_length_prefix(const struct s2n_kem_preferences *kem_pref)
+{
+    return kem_pref && (kem_pref->tls13_pq_hybrid_draft_revision == 0);
 }

@@ -13,37 +13,35 @@
  * permissions and limitations under the License.
  */
 
+#include "tls/s2n_auth_selection.h"
+
 #include "api/s2n.h"
-
-#include "s2n_test.h"
-#include "testlib/s2n_testlib.h"
-
 #include "crypto/s2n_fips.h"
 #include "crypto/s2n_rsa_pss.h"
-
-#include "tls/s2n_auth_selection.h"
+#include "s2n_test.h"
+#include "testlib/s2n_testlib.h"
 #include "tls/s2n_cipher_preferences.h"
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_config.h"
 #include "tls/s2n_connection.h"
 #include "tls/s2n_signature_scheme.h"
 
-#define RSA_AUTH_CIPHER_SUITE &s2n_dhe_rsa_with_3des_ede_cbc_sha
+#define RSA_AUTH_CIPHER_SUITE   &s2n_dhe_rsa_with_3des_ede_cbc_sha
 #define ECDSA_AUTH_CIPHER_SUITE &s2n_ecdhe_ecdsa_with_aes_128_cbc_sha
-#define NO_AUTH_CIPHER_SUITE &s2n_tls13_aes_128_gcm_sha256
+#define NO_AUTH_CIPHER_SUITE    &s2n_tls13_aes_128_gcm_sha256
 
-#define RSA_PKCS1_SIG_SCHEME &s2n_rsa_pkcs1_md5_sha1
-#define RSA_PSS_PSS_SIG_SCHEME &s2n_rsa_pss_pss_sha256
-#define RSA_PSS_RSAE_SIG_SCHEME &s2n_rsa_pss_rsae_sha256
-#define ECDSA_SIG_SCHEME &s2n_ecdsa_secp384r1_sha384
+#define RSA_PKCS1_SIG_SCHEME         &s2n_rsa_pkcs1_md5_sha1
+#define RSA_PSS_PSS_SIG_SCHEME       &s2n_rsa_pss_pss_sha256
+#define RSA_PSS_RSAE_SIG_SCHEME      &s2n_rsa_pss_rsae_sha256
+#define ECDSA_SIG_SCHEME             &s2n_ecdsa_secp384r1_sha384
 #define ECDSA_SIG_SCHEME_OTHER_CURVE &s2n_ecdsa_secp256r1_sha256
 
 #define EXPECT_SUCCESS_IF_RSA_PSS_CERTS_SUPPORTED(x) \
-    if ( s2n_is_rsa_pss_certs_supported() ) { \
-        EXPECT_SUCCESS(x); \
-    } else { \
-        EXPECT_FAILURE(x); \
-    } \
+    if (s2n_is_rsa_pss_certs_supported()) {          \
+        EXPECT_SUCCESS(x);                           \
+    } else {                                         \
+        EXPECT_FAILURE(x);                           \
+    }
 
 static int s2n_test_auth_combo(struct s2n_connection *conn,
         struct s2n_cipher_suite *cipher_suite, const struct s2n_signature_scheme *sig_scheme,
@@ -52,7 +50,7 @@ static int s2n_test_auth_combo(struct s2n_connection *conn,
     struct s2n_cert_chain_and_key *actual_cert_chain;
 
     POSIX_GUARD(s2n_is_cipher_suite_valid_for_auth(conn, cipher_suite));
-    conn->secure.cipher_suite = cipher_suite;
+    conn->secure->cipher_suite = cipher_suite;
 
     POSIX_GUARD(s2n_is_sig_scheme_valid_for_auth(conn, sig_scheme));
     conn->handshake_params.conn_sig_scheme.sig_alg = sig_scheme->sig_alg;
@@ -143,7 +141,7 @@ int main(int argc, char **argv)
 
         /* Test: not valid if certs not available */
         {
-            conn->secure.cipher_suite = NO_AUTH_CIPHER_SUITE;
+            conn->secure->cipher_suite = NO_AUTH_CIPHER_SUITE;
 
             /* No certs exist */
             s2n_connection_set_config(conn, no_certs_config);
@@ -191,7 +189,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_config_add_cert_chain_and_key_to_store(
                     ecdsa_cert_config_for_other_curve, ecdsa_cert_chain_for_other_curve));
 
-            conn->secure.cipher_suite = NO_AUTH_CIPHER_SUITE;
+            conn->secure->cipher_suite = NO_AUTH_CIPHER_SUITE;
 
             s2n_connection_set_config(conn, ecdsa_cert_config);
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, ECDSA_SIG_SCHEME));
@@ -210,14 +208,14 @@ int main(int argc, char **argv)
             s2n_connection_set_config(conn, all_certs_config);
 
             /* RSA auth type */
-            conn->secure.cipher_suite = RSA_AUTH_CIPHER_SUITE;
+            conn->secure->cipher_suite = RSA_AUTH_CIPHER_SUITE;
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_SUCCESS_IF_RSA_PSS_CERTS_SUPPORTED(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_PSS_SIG_SCHEME));
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_RSAE_SIG_SCHEME));
             EXPECT_FAILURE(s2n_is_sig_scheme_valid_for_auth(conn, ECDSA_SIG_SCHEME));
 
             /* ECDSA auth type */
-            conn->secure.cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
+            conn->secure->cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
             EXPECT_FAILURE(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_FAILURE(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_PSS_SIG_SCHEME));
             EXPECT_FAILURE(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_RSAE_SIG_SCHEME));
@@ -231,13 +229,13 @@ int main(int argc, char **argv)
 
             /* RSA auth type */
             EXPECT_SUCCESS(s2n_connection_set_config(client_conn, rsa_cert_config));
-            client_conn->secure.cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
+            client_conn->secure->cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(client_conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(client_conn, RSA_PSS_RSAE_SIG_SCHEME));
 
             /* ECDSA auth type */
             EXPECT_SUCCESS(s2n_connection_set_config(client_conn, ecdsa_cert_config));
-            client_conn->secure.cipher_suite = RSA_AUTH_CIPHER_SUITE;
+            client_conn->secure->cipher_suite = RSA_AUTH_CIPHER_SUITE;
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(client_conn, ECDSA_SIG_SCHEME));
 
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
@@ -248,19 +246,19 @@ int main(int argc, char **argv)
             s2n_connection_set_config(conn, all_certs_config);
 
             /* ephemeral key */
-            conn->secure.cipher_suite = &s2n_dhe_rsa_with_3des_ede_cbc_sha; /* kex = (dhe) */
+            conn->secure->cipher_suite = &s2n_dhe_rsa_with_3des_ede_cbc_sha; /* kex = (dhe) */
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_SUCCESS_IF_RSA_PSS_CERTS_SUPPORTED(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_PSS_SIG_SCHEME));
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_RSAE_SIG_SCHEME));
 
             /* non-ephemeral key */
-            conn->secure.cipher_suite = &s2n_rsa_with_aes_128_cbc_sha; /* kex = (rsa) */
+            conn->secure->cipher_suite = &s2n_rsa_with_aes_128_cbc_sha; /* kex = (rsa) */
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_FAILURE(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_PSS_SIG_SCHEME));
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_RSAE_SIG_SCHEME));
 
             /* no kex at all */
-            conn->secure.cipher_suite = NO_AUTH_CIPHER_SUITE; /* kex = NULL */
+            conn->secure->cipher_suite = NO_AUTH_CIPHER_SUITE; /* kex = NULL */
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PKCS1_SIG_SCHEME));
             EXPECT_SUCCESS_IF_RSA_PSS_CERTS_SUPPORTED(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_PSS_SIG_SCHEME));
             EXPECT_SUCCESS(s2n_is_sig_scheme_valid_for_auth(conn, RSA_PSS_RSAE_SIG_SCHEME));
@@ -274,21 +272,21 @@ int main(int argc, char **argv)
         struct s2n_connection *conn = s2n_connection_new(S2N_CLIENT);
 
         /* RSA auth type */
-        conn->secure.cipher_suite = RSA_AUTH_CIPHER_SUITE;
+        conn->secure->cipher_suite = RSA_AUTH_CIPHER_SUITE;
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA));
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA_PSS));
         EXPECT_FAILURE(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_ECDSA));
         EXPECT_FAILURE(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_UNKNOWN));
 
         /* ECDSA auth type */
-        conn->secure.cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
+        conn->secure->cipher_suite = ECDSA_AUTH_CIPHER_SUITE;
         EXPECT_FAILURE(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA));
         EXPECT_FAILURE(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA_PSS));
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_ECDSA));
         EXPECT_FAILURE(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_UNKNOWN));
 
         /* No auth type */
-        conn->secure.cipher_suite = NO_AUTH_CIPHER_SUITE;
+        conn->secure->cipher_suite = NO_AUTH_CIPHER_SUITE;
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA));
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_RSA_PSS));
         EXPECT_SUCCESS(s2n_is_cert_type_valid_for_auth(conn, S2N_PKEY_TYPE_ECDSA));

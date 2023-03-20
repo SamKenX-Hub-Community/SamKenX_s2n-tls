@@ -13,16 +13,16 @@
  * permissions and limitations under the License.
  */
 
-#include <sys/param.h>
-#include <stdint.h>
-
 #include "tls/extensions/s2n_client_supported_versions.h"
+
+#include <stdint.h>
+#include <sys/param.h>
+
 #include "tls/extensions/s2n_supported_versions.h"
 #include "tls/s2n_alerts.h"
 #include "tls/s2n_cipher_preferences.h"
 #include "tls/s2n_tls.h"
 #include "tls/s2n_tls_parameters.h"
-
 #include "utils/s2n_safety.h"
 
 /**
@@ -74,7 +74,8 @@ static int s2n_client_supported_versions_send(struct s2n_connection *conn, struc
     return S2N_SUCCESS;
 }
 
-static int s2n_extensions_client_supported_versions_process(struct s2n_connection *conn, struct s2n_stuffer *extension) {
+static int s2n_extensions_client_supported_versions_process(struct s2n_connection *conn, struct s2n_stuffer *extension)
+{
     uint8_t highest_supported_version = conn->server_protocol_version;
     uint8_t minimum_supported_version = s2n_unknown_protocol_version;
     POSIX_GUARD_RESULT(s2n_connection_get_minimum_supported_version(conn, &minimum_supported_version));
@@ -115,7 +116,8 @@ static int s2n_extensions_client_supported_versions_process(struct s2n_connectio
         conn->actual_protocol_version = MAX(client_version, conn->actual_protocol_version);
     }
 
-    S2N_ERROR_IF(conn->actual_protocol_version == s2n_unknown_protocol_version, S2N_ERR_UNKNOWN_PROTOCOL_VERSION);
+    POSIX_ENSURE(conn->client_protocol_version != s2n_unknown_protocol_version, S2N_ERR_UNKNOWN_PROTOCOL_VERSION);
+    POSIX_ENSURE(conn->actual_protocol_version != s2n_unknown_protocol_version, S2N_ERR_PROTOCOL_VERSION_UNSUPPORTED);
 
     return S2N_SUCCESS;
 }
@@ -126,16 +128,19 @@ static int s2n_client_supported_versions_recv(struct s2n_connection *conn, struc
         return S2N_SUCCESS;
     }
 
-    if (s2n_extensions_client_supported_versions_process(conn, in) < 0) {
+    int result = s2n_extensions_client_supported_versions_process(conn, in);
+    if (result != S2N_SUCCESS) {
         s2n_queue_reader_unsupported_protocol_version_alert(conn);
-        POSIX_BAIL(S2N_ERR_BAD_MESSAGE);
+        POSIX_ENSURE(s2n_errno != S2N_ERR_SAFETY, S2N_ERR_BAD_MESSAGE);
     }
+    POSIX_GUARD(result);
     return S2N_SUCCESS;
 }
 
 /* Old-style extension functions -- remove after extensions refactor is complete */
 
-int s2n_extensions_client_supported_versions_size(struct s2n_connection *conn) {
+int s2n_extensions_client_supported_versions_size(struct s2n_connection *conn)
+{
     uint8_t minimum_supported_version = s2n_unknown_protocol_version;
     POSIX_GUARD_RESULT(s2n_connection_get_minimum_supported_version(conn, &minimum_supported_version));
     uint8_t highest_supported_version = conn->client_protocol_version;
@@ -145,10 +150,8 @@ int s2n_extensions_client_supported_versions_size(struct s2n_connection *conn) {
     return version_list_length * S2N_TLS_PROTOCOL_VERSION_LEN + 5;
 }
 
-int s2n_extensions_client_supported_versions_recv(struct s2n_connection *conn, struct s2n_stuffer *extension) {
+/* still used in fuzz test */
+int s2n_extensions_client_supported_versions_recv(struct s2n_connection *conn, struct s2n_stuffer *extension)
+{
     return s2n_extension_recv(&s2n_client_supported_versions_extension, conn, extension);
-}
-
-int s2n_extensions_client_supported_versions_send(struct s2n_connection *conn, struct s2n_stuffer *out) {
-    return s2n_extension_send(&s2n_client_supported_versions_extension, conn, out);
 }

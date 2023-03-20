@@ -13,14 +13,13 @@
  * permissions and limitations under the License.
  */
 
+#include "tls/s2n_auth_selection.h"
+
 #include "crypto/s2n_certificate.h"
 #include "crypto/s2n_ecdsa.h"
 #include "crypto/s2n_signature.h"
-
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_kex.h"
-#include "tls/s2n_auth_selection.h"
-
 #include "utils/s2n_safety.h"
 
 /* This module should contain any logic related to choosing a valid combination of
@@ -42,7 +41,7 @@
 
 int s2n_get_auth_method_for_cert_type(s2n_pkey_type cert_type, s2n_authentication_method *auth_method)
 {
-    switch(cert_type) {
+    switch (cert_type) {
         case S2N_PKEY_TYPE_RSA:
         case S2N_PKEY_TYPE_RSA_PSS:
             *auth_method = S2N_AUTHENTICATION_RSA;
@@ -59,7 +58,7 @@ int s2n_get_auth_method_for_cert_type(s2n_pkey_type cert_type, s2n_authenticatio
 
 static int s2n_get_cert_type_for_sig_alg(s2n_signature_algorithm sig_alg, s2n_pkey_type *cert_type)
 {
-    switch(sig_alg) {
+    switch (sig_alg) {
         case S2N_SIGNATURE_RSA_PSS_RSAE:
         case S2N_SIGNATURE_RSA:
             *cert_type = S2N_PKEY_TYPE_RSA;
@@ -175,9 +174,10 @@ int s2n_is_cipher_suite_valid_for_auth(struct s2n_connection *conn, struct s2n_c
 int s2n_is_sig_scheme_valid_for_auth(struct s2n_connection *conn, const struct s2n_signature_scheme *sig_scheme)
 {
     POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
     POSIX_ENSURE_REF(sig_scheme);
 
-    struct s2n_cipher_suite *cipher_suite = conn->secure.cipher_suite;
+    struct s2n_cipher_suite *cipher_suite = conn->secure->cipher_suite;
     POSIX_ENSURE_REF(cipher_suite);
 
     POSIX_GUARD(s2n_certs_exist_for_sig_scheme(conn, sig_scheme));
@@ -201,13 +201,14 @@ int s2n_is_sig_scheme_valid_for_auth(struct s2n_connection *conn, const struct s
 int s2n_is_cert_type_valid_for_auth(struct s2n_connection *conn, s2n_pkey_type cert_type)
 {
     POSIX_ENSURE_REF(conn);
-    POSIX_ENSURE_REF(conn->secure.cipher_suite);
+    POSIX_ENSURE_REF(conn->secure);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite);
 
     s2n_authentication_method auth_method;
     POSIX_GUARD(s2n_get_auth_method_for_cert_type(cert_type, &auth_method));
 
-    if (conn->secure.cipher_suite->auth_method != S2N_AUTHENTICATION_METHOD_SENTINEL) {
-        S2N_ERROR_IF(auth_method != conn->secure.cipher_suite->auth_method, S2N_ERR_CERT_TYPE_UNSUPPORTED);
+    if (conn->secure->cipher_suite->auth_method != S2N_AUTHENTICATION_METHOD_SENTINEL) {
+        S2N_ERROR_IF(auth_method != conn->secure->cipher_suite->auth_method, S2N_ERR_CERT_TYPE_UNSUPPORTED);
     }
 
     return S2N_SUCCESS;

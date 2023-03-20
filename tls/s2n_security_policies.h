@@ -16,10 +16,11 @@
 #pragma once
 
 #include <stdint.h>
+
 #include "tls/s2n_cipher_preferences.h"
+#include "tls/s2n_ecc_preferences.h"
 #include "tls/s2n_kem_preferences.h"
 #include "tls/s2n_signature_scheme.h"
-#include "tls/s2n_ecc_preferences.h"
 
 /* Kept up-to-date by s2n_security_policies_test */
 #define NUM_RSA_PSS_SCHEMES 6
@@ -36,9 +37,9 @@ struct s2n_security_policy {
 struct s2n_security_policy_selection {
     const char *version;
     const struct s2n_security_policy *security_policy;
-    unsigned ecc_extension_required:1;
-    unsigned pq_kem_extension_required:1;
-    unsigned supports_tls13:1;
+    unsigned ecc_extension_required : 1;
+    unsigned pq_kem_extension_required : 1;
+    unsigned supports_tls13 : 1;
 };
 
 extern struct s2n_security_policy_selection security_policy_selection[];
@@ -63,6 +64,7 @@ extern const struct s2n_security_policy security_policy_20190214_gcm;
 extern const struct s2n_security_policy security_policy_20190801;
 extern const struct s2n_security_policy security_policy_20190802;
 extern const struct s2n_security_policy security_policy_default_tls13;
+extern const struct s2n_security_policy security_policy_default_fips;
 extern const struct s2n_security_policy security_policy_test_all;
 
 extern const struct s2n_security_policy security_policy_test_all_tls12;
@@ -105,6 +107,7 @@ extern const struct s2n_security_policy security_policy_pq_tls_1_0_2021_05_23;
 extern const struct s2n_security_policy security_policy_pq_tls_1_0_2021_05_24;
 extern const struct s2n_security_policy security_policy_pq_tls_1_0_2021_05_25;
 extern const struct s2n_security_policy security_policy_pq_tls_1_0_2021_05_26;
+extern const struct s2n_security_policy security_policy_pq_tls_1_0_2023_01_24;
 
 extern const struct s2n_security_policy security_policy_cloudfront_upstream;
 extern const struct s2n_security_policy security_policy_cloudfront_upstream_tls10;
@@ -113,9 +116,11 @@ extern const struct s2n_security_policy security_policy_cloudfront_ssl_v_3;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_0_2014;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_0_2016;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_1_2016;
+extern const struct s2n_security_policy security_policy_cloudfront_tls_1_2_2017;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_2_2018;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_2_2019;
 extern const struct s2n_security_policy security_policy_cloudfront_tls_1_2_2021;
+extern const struct s2n_security_policy security_policy_cloudfront_tls_1_2_2021_chacha20_boosted;
 
 extern const struct s2n_security_policy security_policy_kms_tls_1_0_2018_10;
 extern const struct s2n_security_policy security_policy_kms_fips_tls_1_2_2018_10;

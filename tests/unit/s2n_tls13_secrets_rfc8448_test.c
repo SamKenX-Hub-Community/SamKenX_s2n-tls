@@ -18,11 +18,9 @@
 
 #include "s2n_test.h"
 #include "testlib/s2n_testlib.h"
-
+#include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_tls13_key_schedule.h"
 #include "tls/s2n_tls13_secrets.h"
-
-#include "tls/s2n_cipher_suites.h"
 
 struct s2n_cipher_suite *cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 const struct s2n_ecc_named_curve *curve = &s2n_ecc_curve_x25519;
@@ -74,14 +72,14 @@ int main(int argc, char **argv)
         {
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
 
                 EXPECT_OK(s2n_tls13_extract_secret(conn, S2N_EARLY_SECRET));
                 EXPECT_BYTEARRAY_EQUAL(conn->secrets.tls13.extract_secret,
                         early_secret.data, early_secret.size);
                 EXPECT_EQUAL(conn->secrets.tls13.extract_secret_type, S2N_EARLY_SECRET);
             }
-        }
+        };
 
         /**
          *= https://www.rfc-editor.org/rfc/rfc8448.html#section-3
@@ -149,46 +147,46 @@ int main(int argc, char **argv)
             /* Server */
             {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(S2N_SERVER), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_early_secret(conn, &early_secret));
 
                 conn->kex_params.server_ecc_evp_params.negotiated_curve = curve;
                 conn->kex_params.server_ecc_evp_params.evp_pkey = EVP_PKEY_new_raw_private_key(
-                        openssl_type, NULL, (unsigned char*) server_priv.data, server_priv.size);
+                        openssl_type, NULL, (unsigned char *) server_priv.data, server_priv.size);
                 EXPECT_NOT_NULL(conn->kex_params.server_ecc_evp_params.evp_pkey);
 
                 conn->kex_params.client_ecc_evp_params.negotiated_curve = curve;
                 conn->kex_params.client_ecc_evp_params.evp_pkey = EVP_PKEY_new_raw_public_key(
-                        openssl_type, NULL, (unsigned char*) client_pub.data, client_pub.size);
+                        openssl_type, NULL, (unsigned char *) client_pub.data, client_pub.size);
                 EXPECT_NOT_NULL(conn->kex_params.client_ecc_evp_params.evp_pkey);
 
                 EXPECT_OK(s2n_tls13_extract_secret(conn, S2N_HANDSHAKE_SECRET));
                 EXPECT_BYTEARRAY_EQUAL(conn->secrets.tls13.extract_secret,
                         handshake_secret.data, handshake_secret.size);
                 EXPECT_EQUAL(conn->secrets.tls13.extract_secret_type, S2N_HANDSHAKE_SECRET);
-            }
+            };
 
             /* Client */
             {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(S2N_CLIENT), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_early_secret(conn, &early_secret));
 
                 conn->kex_params.server_ecc_evp_params.negotiated_curve = curve;
                 conn->kex_params.server_ecc_evp_params.evp_pkey = EVP_PKEY_new_raw_public_key(
-                        openssl_type, NULL, (unsigned char*) server_pub.data, server_pub.size);
+                        openssl_type, NULL, (unsigned char *) server_pub.data, server_pub.size);
                 EXPECT_NOT_NULL(conn->kex_params.server_ecc_evp_params.evp_pkey);
 
                 conn->kex_params.client_ecc_evp_params.negotiated_curve = curve;
                 conn->kex_params.client_ecc_evp_params.evp_pkey = EVP_PKEY_new_raw_private_key(
-                        openssl_type, NULL, (unsigned char*) client_priv.data, client_priv.size);
+                        openssl_type, NULL, (unsigned char *) client_priv.data, client_priv.size);
                 EXPECT_NOT_NULL(conn->kex_params.client_ecc_evp_params.evp_pkey);
 
                 EXPECT_OK(s2n_tls13_extract_secret(conn, S2N_HANDSHAKE_SECRET));
                 EXPECT_BYTEARRAY_EQUAL(conn->secrets.tls13.extract_secret,
                         handshake_secret.data, handshake_secret.size);
                 EXPECT_EQUAL(conn->secrets.tls13.extract_secret_type, S2N_HANDSHAKE_SECRET);
-            }
+            };
         }
 #endif
 
@@ -250,7 +248,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_handshake_secret(conn, &handshake_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, SERVER_HELLO, &hash));
 
@@ -262,7 +260,7 @@ int main(int argc, char **argv)
                 EXPECT_BYTEARRAY_EQUAL(conn->handshake.client_finished,
                         finished_key.data, finished_key.size);
             }
-        }
+        };
 
         /* Derive S2N_SERVER_HANDSHAKE_TRAFFIC_SECRET */
         {
@@ -318,7 +316,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_handshake_secret(conn, &handshake_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, SERVER_HELLO, &hash));
 
@@ -329,7 +327,7 @@ int main(int argc, char **argv)
                 EXPECT_BYTEARRAY_EQUAL(conn->handshake.server_finished,
                         finished_key.data, finished_key.size);
             }
-        }
+        };
 
         /**
          *= https://www.rfc-editor.org/rfc/rfc8448.html#section-3
@@ -360,7 +358,7 @@ int main(int argc, char **argv)
         {
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_handshake_secret(conn, &handshake_secret));
 
                 EXPECT_OK(s2n_tls13_extract_secret(conn, S2N_MASTER_SECRET));
@@ -368,7 +366,7 @@ int main(int argc, char **argv)
                         master_secret.data, master_secret.size);
                 EXPECT_EQUAL(conn->secrets.tls13.extract_secret_type, S2N_MASTER_SECRET);
             }
-        }
+        };
 
         /* Derive CLIENT_APPLICATION_TRAFFIC_SECRET_0 */
         {
@@ -401,7 +399,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_master_secret(conn, &master_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, SERVER_FINISHED, &hash));
 
@@ -410,7 +408,7 @@ int main(int argc, char **argv)
                 EXPECT_EQUAL(derived_secret.size, secret.size);
                 EXPECT_BYTEARRAY_EQUAL(derived_secret.data, secret.data, secret.size);
             }
-        }
+        };
 
         /* Derive SERVER_APPLICATION_TRAFFIC_SECRET_0 */
         {
@@ -445,7 +443,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_master_secret(conn, &master_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, SERVER_FINISHED, &hash));
 
@@ -455,7 +453,7 @@ int main(int argc, char **argv)
                 EXPECT_EQUAL(derived_secret.size, secret.size);
                 EXPECT_BYTEARRAY_EQUAL(derived_secret.data, secret.data, secret.size);
             }
-        }
+        };
 
         /* Derive RESUMPTION_MASTER_SECRET */
         {
@@ -490,7 +488,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_master_secret(conn, &master_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, CLIENT_FINISHED, &hash));
 
@@ -499,8 +497,8 @@ int main(int argc, char **argv)
                 EXPECT_BYTEARRAY_EQUAL(conn->secrets.tls13.resumption_master_secret,
                         secret.data, secret.size);
             }
-        }
-    }
+        };
+    };
 
     /* Resumed 0-RTT Handshake */
     {
@@ -530,7 +528,7 @@ int main(int argc, char **argv)
         {
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
 
                 DEFER_CLEANUP(struct s2n_psk *psk = s2n_test_psk_new(conn), s2n_psk_free);
                 EXPECT_NOT_NULL(psk);
@@ -548,7 +546,7 @@ int main(int argc, char **argv)
                         early_secret.data, early_secret.size);
                 EXPECT_EQUAL(conn->secrets.tls13.extract_secret_type, S2N_EARLY_SECRET);
             }
-        }
+        };
 
         /* Derive BINDER_KEY */
         {
@@ -563,7 +561,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
 
                 DEFER_CLEANUP(struct s2n_psk *psk = s2n_test_psk_new(conn), s2n_psk_free);
                 EXPECT_NOT_NULL(psk);
@@ -575,7 +573,7 @@ int main(int argc, char **argv)
                 EXPECT_EQUAL(derived_secret.size, binder_key.size);
                 EXPECT_BYTEARRAY_EQUAL(derived_secret.data, binder_key.data, binder_key.size);
             }
-        }
+        };
 
         /* Derive CLIENT_EARLY_TRAFFIC_SECRET */
         {
@@ -608,7 +606,7 @@ int main(int argc, char **argv)
 
             for (size_t i = 0; i < s2n_array_len(modes); i++) {
                 DEFER_CLEANUP(struct s2n_connection *conn = s2n_connection_new(modes[i]), s2n_connection_ptr_free);
-                conn->secure.cipher_suite = cipher_suite;
+                conn->secure->cipher_suite = cipher_suite;
                 EXPECT_OK(s2n_connection_set_test_early_secret(conn, &early_secret));
                 EXPECT_OK(s2n_connection_set_test_transcript_hash(conn, CLIENT_HELLO, &hash));
 
@@ -617,8 +615,8 @@ int main(int argc, char **argv)
                 EXPECT_EQUAL(derived_secret.size, secret.size);
                 EXPECT_BYTEARRAY_EQUAL(derived_secret.data, secret.data, secret.size);
             }
-        }
-    }
+        };
+    };
 
     END_TEST();
 }

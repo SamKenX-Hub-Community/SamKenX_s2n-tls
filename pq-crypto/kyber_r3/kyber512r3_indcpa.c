@@ -9,6 +9,8 @@
 #include "pq-crypto/s2n_pq_random.h"
 #include "utils/s2n_safety.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
 * Name:        pack_pk
 *

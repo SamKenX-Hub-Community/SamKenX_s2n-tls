@@ -15,6 +15,8 @@ else ifeq ($(PLATFORM),FreeBSD)
     LIBS = -lthr
 else ifeq ($(PLATFORM),NetBSD)
     LIBS = -pthread
+else ifeq ($(PLATFORM),OpenBSD)
+    LIBS = -pthread -lkvm
 else
     LIBS = -pthread -ldl -lrt
 endif
@@ -169,8 +171,6 @@ endif
 ifndef COV_TOOL
 	ifneq ("$(wildcard $(LLVM_GCOV_MARKER_FILE))","")
 		COV_TOOL=llvm-gcov.sh
-	else
-		COV_TOOL=gcov
 	endif
 endif
 
@@ -186,7 +186,7 @@ try_compile = $(shell $(CC) $(CFLAGS) -c -o tmp.o $(1) > /dev/null 2>&1; echo $$
 # Determine if execinfo.h is available
 TRY_COMPILE_EXECINFO := $(call try_compile,$(S2N_ROOT)/tests/features/execinfo.c)
 ifeq ($(TRY_COMPILE_EXECINFO), 0)
-	DEFAULT_CFLAGS += -DS2N_HAVE_EXECINFO
+	DEFAULT_CFLAGS += -DS2N_STACKTRACE
 endif
 
 # Determine if cpuid.h is available
@@ -219,7 +219,7 @@ ifeq ($(TRY_EVP_MD5_SHA1_HASH), 0)
 	DEFAULT_CFLAGS += -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
 endif
 
-# Determine if EVP_md5_sha1 is available
+# Determine if EVP_RC4 is available
 TRY_EVP_RC4 := $(call try_compile,$(S2N_ROOT)/tests/features/evp_rc4.c)
 ifeq ($(TRY_EVP_RC4), 0)
 	DEFAULT_CFLAGS += -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
@@ -229,6 +229,12 @@ endif
 TRY_EVP_MD_CTX_SET_PKEY_CTX := $(call try_compile,$(S2N_ROOT)/tests/features/evp_md_ctx_set_pkey_ctx.c)
 ifeq ($(TRY_EVP_MD_CTX_SET_PKEY_CTX), 0)
 	DEFAULT_CFLAGS += -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
+endif
+
+# Determine if the Kyber 512 KEM API is available in libcrypto
+TRY_LIBCRYPTO_SUPPORTS_KYBER512 := $(call try_compile,$(S2N_ROOT)/tests/features/evp_kem_kyber_512.c)
+ifeq ($(TRY_LIBCRYPTO_SUPPORTS_KYBER512), 0)
+	DEFAULT_CFLAGS += -DS2N_LIBCRYPTO_SUPPORTS_KYBER512
 endif
 
 # Determine if madvise() is available
@@ -249,6 +255,12 @@ ifeq ($(TRY_COMPILE_CLONE), 0)
 	DEFAULT_CFLAGS += -DS2N_CLONE_SUPPORTED
 endif
 
+# Determine if kTLS is available
+TRY_COMPILE_KTLS := $(call try_compile,$(S2N_ROOT)/tests/features/ktls.c)
+ifeq ($(TRY_COMPILE_KTLS), 0)
+	DEFAULT_CFLAGS += -DS2N_PLATFORM_SUPPORTS_KTLS
+endif
+
 CFLAGS_LLVM = ${DEFAULT_CFLAGS} -emit-llvm -c -g -O1
 
 $(BITCODE_DIR)%.bc: %.c
@@ -260,10 +272,6 @@ INDENTOPTS = -npro -kr -i4 -ts4 -nut -sob -l180 -ss -ncs -cp1
 .PHONY : indentsource
 indentsource:
 	( for source in ${SOURCES} ; do ${INDENT} ${INDENTOPTS} $$source; done )
-
-.PHONY : gcov
-gcov: 
-	( for source in ${SOURCES} ; do $(COV_TOOL) $$source;  done )
 
 .PHONY : lcov
 lcov: 

@@ -14,10 +14,8 @@
  */
 
 #include "api/s2n.h"
-
-#include "tls/extensions/s2n_early_data_indication.h"
-
 #include "tls/extensions/s2n_client_psk.h"
+#include "tls/extensions/s2n_early_data_indication.h"
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_early_data.h"
 #include "tls/s2n_protocol_preferences.h"
@@ -55,7 +53,7 @@ static S2N_RESULT s2n_early_data_config_is_possible(struct s2n_connection *conn)
     RESULT_ENSURE_REF(conn);
 
     struct s2n_psk *first_psk = NULL;
-    RESULT_GUARD(s2n_array_get(&conn->psk_params.psk_list, 0, (void**) &first_psk));
+    RESULT_GUARD(s2n_array_get(&conn->psk_params.psk_list, 0, (void **) &first_psk));
     RESULT_ENSURE_REF(first_psk);
 
     struct s2n_early_data_config *early_data_config = &first_psk->early_data_config;
@@ -145,14 +143,17 @@ static int s2n_client_early_data_indication_is_missing(struct s2n_connection *co
 
 static int s2n_client_early_data_indication_send(struct s2n_connection *conn, struct s2n_stuffer *out)
 {
+    POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
+
     POSIX_GUARD_RESULT(s2n_setup_middlebox_compat_for_early_data(conn));
     POSIX_GUARD_RESULT(s2n_connection_set_early_data_state(conn, S2N_EARLY_DATA_REQUESTED));
 
     /* Set the cipher suite for early data */
     struct s2n_psk *first_psk = NULL;
-    POSIX_GUARD_RESULT(s2n_array_get(&conn->psk_params.psk_list, 0, (void**) &first_psk));
+    POSIX_GUARD_RESULT(s2n_array_get(&conn->psk_params.psk_list, 0, (void **) &first_psk));
     POSIX_ENSURE_REF(first_psk);
-    conn->secure.cipher_suite = first_psk->early_data_config.cipher_suite;
+    conn->secure->cipher_suite = first_psk->early_data_config.cipher_suite;
 
     return S2N_SUCCESS;
 }

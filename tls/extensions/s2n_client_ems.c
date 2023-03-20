@@ -13,12 +13,11 @@
  * permissions and limitations under the License.
  */
 
-#include <sys/param.h>
 #include <stdint.h>
+#include <sys/param.h>
 
-#include "tls/s2n_tls.h"
 #include "tls/extensions/s2n_ems.h"
-
+#include "tls/s2n_tls.h"
 #include "utils/s2n_safety.h"
 
 static int s2n_client_ems_recv(struct s2n_connection *conn, struct s2n_stuffer *extension);
@@ -46,16 +45,27 @@ static int s2n_client_ems_recv(struct s2n_connection *conn, struct s2n_stuffer *
 {
     POSIX_ENSURE_REF(conn);
 
-    /* Read nothing. The extension just needs to exist. */
+    /* Read nothing. The extension just needs to exist without data. */
+    POSIX_ENSURE(s2n_stuffer_data_available(extension) == 0, S2N_ERR_UNSUPPORTED_EXTENSION);
     conn->ems_negotiated = true;
 
     return S2N_SUCCESS;
 }
 
+/**
+ *= https://www.rfc-editor.org/rfc/rfc7627#section-5.3
+ *= type=exception
+ *# When offering an abbreviated handshake, the client MUST send the
+ *# "extended_master_secret" extension in its ClientHello.
+ *
+ *  We added an exception here in order to prevent a drop in 
+ *  session resumption rates during deployment. Eventually clients
+ *  will be forced to do a full handshake as sessions expire and pick up EMS at that point.
+ **/
 static bool s2n_client_ems_should_send(struct s2n_connection *conn)
 {
     /* Don't send this extension if the previous session did not negotiate EMS */
-    if (conn->set_session && !conn->ems_negotiated) {
+    if (conn && conn->set_session && !conn->ems_negotiated) {
         return false;
     } else {
         return true;

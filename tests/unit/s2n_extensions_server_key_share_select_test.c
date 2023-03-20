@@ -15,14 +15,18 @@
 
 #include "s2n_test.h"
 #include "testlib/s2n_testlib.h"
-#include "tls/s2n_tls.h"
-#include "tls/s2n_tls13.h"
 #include "tls/extensions/s2n_server_key_share.h"
 #include "tls/s2n_security_policies.h"
+#include "tls/s2n_tls.h"
+#include "tls/s2n_tls13.h"
 
 /* These tests check the server's logic when selecting a keyshare and supporting group. */
-int main() {
+int main()
+{
     BEGIN_TEST();
+
+/* Need at least two KEM's to test fallback */
+#if (S2N_SUPPORTED_KEM_GROUPS_COUNT > 1)
 
     EXPECT_SUCCESS(s2n_enable_tls13_in_test());
 
@@ -43,7 +47,7 @@ int main() {
         EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
         EXPECT_SUCCESS(s2n_connection_free(server_conn));
-    }
+    };
 
     /* If client has sent no valid keyshares, but server and client have a mutually supported EC curve,
      * send Hello Retry Request. */
@@ -70,7 +74,7 @@ int main() {
         EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
 
         EXPECT_SUCCESS(s2n_connection_free(server_conn));
-    }
+    };
 
     /* When client has only sent a valid keyshare for
      * curve 1, Hello Retry Request is not sent and server chooses curve 1. */
@@ -101,29 +105,30 @@ int main() {
         EXPECT_NULL(server_conn->kex_params.server_kem_group_params.kem_group);
         EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
-        EXPECT_SUCCESS(s2n_connection_free(server_conn)); 
-    }
+        EXPECT_SUCCESS(s2n_connection_free(server_conn));
+    };
 
     {
         const struct s2n_kem_group *test_kem_groups[] = {
-                &s2n_secp256r1_sike_p434_r3,
-                &s2n_secp256r1_bike1_l1_r2,
-                &s2n_secp256r1_kyber_512_r2
+            &s2n_secp256r1_kyber_512_r3,
+    #if EVP_APIS_SUPPORTED
+            &s2n_x25519_kyber_512_r3,
+    #endif
         };
 
         const struct s2n_kem_preferences test_kem_pref = {
-                .kem_count = 0,
-                .kems = NULL,
-                .tls13_kem_group_count = s2n_array_len(test_kem_groups),
-                .tls13_kem_groups = test_kem_groups,
+            .kem_count = 0,
+            .kems = NULL,
+            .tls13_kem_group_count = s2n_array_len(test_kem_groups),
+            .tls13_kem_groups = test_kem_groups,
         };
 
         const struct s2n_security_policy test_security_policy = {
-                .minimum_protocol_version = S2N_SSLv3,
-                .cipher_preferences = &cipher_preferences_test_all_tls13,
-                .kem_preferences = &test_kem_pref,
-                .signature_preferences = &s2n_signature_preferences_20200207,
-                .ecc_preferences = &s2n_ecc_preferences_20200310,
+            .minimum_protocol_version = S2N_SSLv3,
+            .cipher_preferences = &cipher_preferences_test_all_tls13,
+            .kem_preferences = &test_kem_pref,
+            .signature_preferences = &s2n_signature_preferences_20200207,
+            .ecc_preferences = &s2n_ecc_preferences_20200310,
         };
 
         /* If both server_curve and server_kem_group are set (erroneous behavior), we should
@@ -151,7 +156,7 @@ int main() {
             EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* If client has sent no valid keyshares but server and client mutually support KEM group 1,
          * select KEM group 1 and send Hello Retry Request. */
@@ -195,7 +200,7 @@ int main() {
             EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* When client has only sent a valid keyshare for
          * KEM group 1, Hello Retry Request is not sent and server chooses group 1. */
@@ -241,7 +246,7 @@ int main() {
             EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* When client has sent a valid keyshares for group 0,
          * Hello Retry Request is not sent and server chooses group 0. */
@@ -286,7 +291,7 @@ int main() {
             EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* When client sent no valid keyshares,
          * server should choose kem_group[0] and send HRR. */
@@ -331,7 +336,7 @@ int main() {
             EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* When client sent valid keyshares
          * for everything, server should choose kem_group[0] and not send HRR. */
@@ -353,7 +358,7 @@ int main() {
             /* Server would have initially chosen kem_group[0] when processing the supported_groups extension */
             EXPECT_NULL(server_conn->kex_params.server_ecc_evp_params.negotiated_curve);
             struct s2n_kem_group_params *server_params = &server_conn->kex_params.server_kem_group_params;
-            const struct s2n_kem_group *kem_group0 = kem_pref->tls13_kem_groups[0];;
+            const struct s2n_kem_group *kem_group0 = kem_pref->tls13_kem_groups[0];
             server_params->kem_group = kem_group0;
             server_params->kem_params.kem = kem_group0->kem;
             server_params->ecc_params.negotiated_curve = kem_group0->curve;
@@ -385,7 +390,7 @@ int main() {
             EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /* When client sent valid keyshares
          * only for ECC, server should choose curves[0] and not send HRR. */
@@ -407,7 +412,7 @@ int main() {
             /* Server would have initially chosen kem_group[0] when processing the supported_groups extension */
             EXPECT_NULL(server_conn->kex_params.server_ecc_evp_params.negotiated_curve);
             struct s2n_kem_group_params *server_params = &server_conn->kex_params.server_kem_group_params;
-            const struct s2n_kem_group *kem_group0 = kem_pref->tls13_kem_groups[0];;
+            const struct s2n_kem_group *kem_group0 = kem_pref->tls13_kem_groups[0];
             server_params->kem_group = kem_group0;
             server_params->kem_params.kem = kem_group0->kem;
             server_params->ecc_params.negotiated_curve = kem_group0->curve;
@@ -435,9 +440,9 @@ int main() {
             EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
-    }
-
+        };
+    };
+#endif
     END_TEST();
     return 0;
 }

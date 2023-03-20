@@ -19,29 +19,31 @@
 /* Include source to test static methods. */
 #include "tls/extensions/s2n_client_psk.c"
 
-#define TEST_BYTES 0x01, 0xFF, 0x23
+#define TEST_BYTES      0x01, 0xFF, 0x23
 #define TEST_BYTES_SIZE 0x00, 0x03
 
-#define TEST_BYTES_2 0x0A, 0x0B, 0x0C
+#define TEST_BYTES_2      0x0A, 0x0B, 0x0C
 #define TEST_BYTES_SIZE_2 0x00, 0x03
 
-#define MILLIS_TO_NANOS(millis) (millis * (uint64_t)ONE_MILLISEC_IN_NANOS)
+#define MILLIS_TO_NANOS(millis) (millis * (uint64_t) ONE_MILLISEC_IN_NANOS)
+
+#define BINDER_SIZE 32
 
 struct s2n_psk_test_case {
     s2n_hmac_algorithm hmac_alg;
     uint8_t hash_size;
-    const uint8_t* identity;
+    const uint8_t *identity;
     size_t identity_size;
 };
 
 static int s2n_test_select_psk_identity_callback(struct s2n_connection *conn, void *context,
         struct s2n_offered_psk_list *psk_identity_list)
 {
-    uint16_t *wire_index_choice = (uint16_t*) context;
+    uint16_t *wire_index_choice = (uint16_t *) context;
 
     struct s2n_offered_psk offered_psk = { 0 };
     uint16_t idx = 0;
-    while(s2n_offered_psk_list_has_next(psk_identity_list)) {
+    while (s2n_offered_psk_list_has_next(psk_identity_list)) {
         POSIX_GUARD(s2n_offered_psk_list_next(psk_identity_list, &offered_psk));
         if (idx == *wire_index_choice) {
             POSIX_GUARD(s2n_offered_psk_list_choose_psk(psk_identity_list, &offered_psk));
@@ -80,8 +82,8 @@ static int s2n_setup_ticket_key(struct s2n_config *config)
      *#        90b6c73bb50f9c3122ec844ad7c2b3e5 (32 octets)
      **/
     S2N_BLOB_FROM_HEX(ticket_key,
-    "077709362c2e32df0ddc3f0dc47bba63"
-    "90b6c73bb50f9c3122ec844ad7c2b3e5");
+            "077709362c2e32df0ddc3f0dc47bba63"
+            "90b6c73bb50f9c3122ec844ad7c2b3e5");
 
     /* Set up encryption key */
     uint64_t current_time = 0;
@@ -89,14 +91,14 @@ static int s2n_setup_ticket_key(struct s2n_config *config)
 
     POSIX_GUARD(s2n_config_set_session_tickets_onoff(config, 1));
     POSIX_GUARD(config->wall_clock(config->sys_clock_ctx, &current_time));
-    POSIX_GUARD(s2n_config_add_ticket_crypto_key(config, ticket_key_name, strlen((char *)ticket_key_name),
-                ticket_key.data, ticket_key.size, current_time/ONE_SEC_IN_NANOS));
+    POSIX_GUARD(s2n_config_add_ticket_crypto_key(config, ticket_key_name, strlen((char *) ticket_key_name),
+            ticket_key.data, ticket_key.size, current_time / ONE_SEC_IN_NANOS));
     return S2N_SUCCESS;
 }
 
 static S2N_RESULT s2n_setup_encrypted_ticket(struct s2n_connection *conn, struct s2n_stuffer *output)
 {
-    conn->tls13_ticket_fields = (struct s2n_ticket_fields) { 0 };
+    conn->tls13_ticket_fields = (struct s2n_ticket_fields){ 0 };
     uint8_t test_secret_data[] = "test secret";
     RESULT_GUARD_POSIX(s2n_alloc(&conn->tls13_ticket_fields.session_secret, sizeof(test_secret_data)));
     RESULT_CHECKED_MEMCPY(conn->tls13_ticket_fields.session_secret.data, test_secret_data, sizeof(test_secret_data));
@@ -168,7 +170,7 @@ int main(int argc, char **argv)
         EXPECT_FAILURE_WITH_ERRNO(s2n_client_psk_extension.if_missing(conn), S2N_ERR_UNSUPPORTED_EXTENSION);
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test: s2n_client_psk_should_send */
     {
@@ -184,7 +186,7 @@ int main(int argc, char **argv)
         conn->actual_protocol_version = S2N_TLS13;
         EXPECT_FALSE(s2n_client_psk_extension.should_send(conn));
 
-        EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+        EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
 
         /* If send is called with a NULL stuffer, it will fail.
          * So a failure indicates that send was called.
@@ -196,9 +198,9 @@ int main(int argc, char **argv)
 
         /* Only send the extension after a retry if at least one PSK matches the cipher suite */
         {
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
-            const s2n_hmac_algorithm matching_hmac_alg = conn->secure.cipher_suite->prf_alg;
-            const s2n_hmac_algorithm different_hmac_alg = conn->secure.cipher_suite->prf_alg + 1;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            const s2n_hmac_algorithm matching_hmac_alg = conn->secure->cipher_suite->prf_alg;
+            const s2n_hmac_algorithm different_hmac_alg = conn->secure->cipher_suite->prf_alg + 1;
 
             /* Do send if the PSK does NOT match the cipher suite, but this is NOT a retry */
             conn->handshake.handshake_type = INITIAL;
@@ -218,13 +220,13 @@ int main(int argc, char **argv)
             /* Do send if there are two PSKs, and one matches the cipher suite */
             conn->handshake.handshake_type = HELLO_RETRY_REQUEST;
             psk->hmac_alg = different_hmac_alg;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
             psk->hmac_alg = matching_hmac_alg;
             EXPECT_TRUE(s2n_client_psk_extension.should_send(conn));
-        }
+        };
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test: s2n_generate_obfuscated_ticket_age */
     {
@@ -238,21 +240,21 @@ int main(int argc, char **argv)
             current_time = 0;
             psk.ticket_issue_time = 10;
             EXPECT_ERROR_WITH_ERRNO(s2n_generate_obfuscated_ticket_age(&psk, current_time, &output), S2N_ERR_SAFETY);
-        }
+        };
 
         /* Ticket age is too large to fit in a uint32_t */
         {
             current_time = UINT64_MAX;
             psk.ticket_issue_time = 0;
             EXPECT_ERROR_WITH_ERRNO(s2n_generate_obfuscated_ticket_age(&psk, current_time, &output), S2N_ERR_SAFETY);
-        }
+        };
 
         /* External psk */
         {
             psk.type = S2N_PSK_TYPE_EXTERNAL;
             EXPECT_OK(s2n_generate_obfuscated_ticket_age(&psk, current_time, &output));
             EXPECT_EQUAL(output, 0);
-        }
+        };
 
         struct {
             uint64_t current_time;
@@ -278,7 +280,7 @@ int main(int argc, char **argv)
             EXPECT_OK(s2n_generate_obfuscated_ticket_age(&psk, current_time, &output));
             EXPECT_EQUAL(output, test_cases[i].expected_output);
         }
-    }
+    };
 
     /* Test: s2n_client_psk_send */
     {
@@ -291,7 +293,7 @@ int main(int argc, char **argv)
             EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
 
             struct s2n_psk *psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
             EXPECT_OK(s2n_psk_init(psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(psk, test_identity, sizeof(test_identity)));
             psk->hmac_alg = S2N_HMAC_SHA384;
@@ -318,13 +320,13 @@ int main(int argc, char **argv)
             EXPECT_EQUAL(obfuscated_ticket_age, 0);
 
             EXPECT_EQUAL(s2n_stuffer_data_available(&out),
-                    SHA384_DIGEST_LENGTH /* binder size */
-                    + sizeof(uint8_t) /* size of binder size */
-                    + sizeof(uint16_t)) /* size of binder list size */;
+                    SHA384_DIGEST_LENGTH         /* binder size */
+                            + sizeof(uint8_t)    /* size of binder size */
+                            + sizeof(uint16_t)); /* size of binder list size */
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&out));
-        }
+        };
 
         /* Send multiple PSK identities */
         {
@@ -335,16 +337,14 @@ int main(int argc, char **argv)
             EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
 
             struct s2n_psk_test_case test_cases[] = {
-                    { .hmac_alg = S2N_HMAC_SHA224, .hash_size = SHA224_DIGEST_LENGTH,
-                            .identity = test_identity, .identity_size = sizeof(test_identity) },
-                    { .hmac_alg = S2N_HMAC_SHA384, .hash_size = SHA384_DIGEST_LENGTH,
-                            .identity = test_identity_2, .identity_size =  sizeof(test_identity_2)},
+                { .hmac_alg = S2N_HMAC_SHA224, .hash_size = SHA224_DIGEST_LENGTH, .identity = test_identity, .identity_size = sizeof(test_identity) },
+                { .hmac_alg = S2N_HMAC_SHA384, .hash_size = SHA384_DIGEST_LENGTH, .identity = test_identity_2, .identity_size = sizeof(test_identity_2) },
             };
 
             uint16_t binder_list_size = 0;
             for (size_t i = 0; i < s2n_array_len(test_cases); i++) {
                 struct s2n_psk *psk = NULL;
-                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
                 EXPECT_OK(s2n_psk_init(psk, S2N_PSK_TYPE_EXTERNAL));
                 EXPECT_SUCCESS(s2n_psk_set_identity(psk, test_cases[i].identity, test_cases[i].identity_size));
                 psk->hmac_alg = test_cases[i].hmac_alg;
@@ -377,12 +377,12 @@ int main(int argc, char **argv)
             }
 
             EXPECT_EQUAL(s2n_stuffer_data_available(&out),
-                    binder_list_size /* binder list size */
-                    + sizeof(uint16_t)) /* size of binder list size */;
+                    binder_list_size             /* binder list size */
+                            + sizeof(uint16_t)); /* size of binder list size */
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&out));
-        }
+        };
 
         /* Send a resumption psk identity */
         {
@@ -398,7 +398,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             struct s2n_psk *psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
             EXPECT_OK(s2n_psk_init(psk, S2N_PSK_TYPE_RESUMPTION));
             EXPECT_SUCCESS(s2n_psk_set_identity(psk, test_identity, sizeof(test_identity)));
             psk->hmac_alg = S2N_HMAC_SHA384;
@@ -407,8 +407,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_client_psk_extension.send(conn, &out));
 
-            EXPECT_SUCCESS(s2n_stuffer_skip_read(&out, sizeof(uint16_t) /* identity_list_size */ +
-                sizeof(uint16_t) /* identity_size */ + sizeof(test_identity)));
+            EXPECT_SUCCESS(s2n_stuffer_skip_read(&out, sizeof(uint16_t) /* identity_list_size */ + sizeof(uint16_t) /* identity_size */ + sizeof(test_identity)));
 
             uint32_t obfuscated_ticket_age = 0;
             EXPECT_SUCCESS(s2n_stuffer_read_uint32(&out, &obfuscated_ticket_age));
@@ -417,7 +416,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
             EXPECT_SUCCESS(s2n_stuffer_free(&out));
-        }
+        };
 
         /* On the second ClientHello after a retry request,
          * do not send any PSKs that do not match the cipher suite.
@@ -433,24 +432,28 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&out, 0));
 
             const struct s2n_psk_test_case matching_psk = {
-                    .hmac_alg = S2N_HMAC_SHA384, .hash_size = SHA384_DIGEST_LENGTH,
-                    .identity = test_identity, .identity_size = sizeof(test_identity)
+                .hmac_alg = S2N_HMAC_SHA384,
+                .hash_size = SHA384_DIGEST_LENGTH,
+                .identity = test_identity,
+                .identity_size = sizeof(test_identity)
             };
             const struct s2n_psk_test_case non_matching_psk = {
-                    .hmac_alg = S2N_HMAC_SHA224, .hash_size = SHA224_DIGEST_LENGTH,
-                    .identity = test_identity, .identity_size = sizeof(test_identity)
+                .hmac_alg = S2N_HMAC_SHA224,
+                .hash_size = SHA224_DIGEST_LENGTH,
+                .identity = test_identity,
+                .identity_size = sizeof(test_identity)
             };
             struct s2n_psk_test_case test_cases[] = { matching_psk, non_matching_psk };
 
             struct s2n_connection *conn;
             EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
             conn->handshake.handshake_type = HELLO_RETRY_REQUEST;
-            conn->secure.cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
-            EXPECT_EQUAL(conn->secure.cipher_suite->prf_alg, matching_psk.hmac_alg);
+            conn->secure->cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
+            EXPECT_EQUAL(conn->secure->cipher_suite->prf_alg, matching_psk.hmac_alg);
 
             for (size_t i = 0; i < s2n_array_len(test_cases); i++) {
                 struct s2n_psk *psk = NULL;
-                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
                 EXPECT_OK(s2n_psk_init(psk, S2N_PSK_TYPE_EXTERNAL));
                 EXPECT_SUCCESS(s2n_psk_set_identity(psk, test_cases[i].identity, test_cases[i].identity_size));
                 psk->hmac_alg = test_cases[i].hmac_alg;
@@ -480,8 +483,9 @@ int main(int argc, char **argv)
              * It should NOT reserve space for the binder for the non-matching psk. */
             EXPECT_EQUAL(s2n_stuffer_data_available(&out),
                     matching_psk.hash_size
-                    + sizeof(uint8_t) /* size of binder size */
-                    + sizeof(uint16_t)) /* size of binder list size */;
+                            + sizeof(uint8_t) /* size of binder size */
+                            + sizeof(uint16_t))
+            /* size of binder list size */;
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&out));
@@ -497,7 +501,7 @@ int main(int argc, char **argv)
          *# selected cipher suite.
          */
         if (s2n_is_tls13_fully_supported()) {
-            DEFER_CLEANUP(struct s2n_cert_chain_and_key *chain_and_key,
+            DEFER_CLEANUP(struct s2n_cert_chain_and_key *chain_and_key = NULL,
                     s2n_cert_chain_and_key_ptr_free);
             EXPECT_SUCCESS(s2n_test_cert_chain_and_key_new(&chain_and_key,
                     S2N_DEFAULT_ECDSA_TEST_CERT_CHAIN, S2N_DEFAULT_ECDSA_TEST_PRIVATE_KEY));
@@ -547,7 +551,7 @@ int main(int argc, char **argv)
             /* Verify the handshake could complete successfully */
             EXPECT_SUCCESS(s2n_negotiate_test_server_and_client(server_conn, client_conn));
         }
-    }
+    };
 
     /* Test: s2n_select_external_psk */
     {
@@ -562,7 +566,7 @@ int main(int argc, char **argv)
             EXPECT_ERROR_WITH_ERRNO(s2n_select_external_psk(NULL, &wire_identity_list), S2N_ERR_NULL);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         struct s2n_blob identity_1 = { 0 };
         EXPECT_SUCCESS(s2n_blob_init(&identity_1, test_identity, sizeof(test_identity)));
@@ -589,7 +593,7 @@ int main(int argc, char **argv)
             size_t wire_match_index;
             size_t local_match_index;
         } test_cases[] = {
-#define WIRE_IDENTITIES(list) .wire_identities = list, .wire_identities_len = s2n_array_len(list)
+#define WIRE_IDENTITIES(list)  .wire_identities = list, .wire_identities_len = s2n_array_len(list)
 #define LOCAL_IDENTITIES(list) .local_identities = list, .local_identities_len = s2n_array_len(list)
             /* No wire or local identities */
             { .match = false },
@@ -608,53 +612,34 @@ int main(int argc, char **argv)
             { .match = false, WIRE_IDENTITIES(list_without_psk1), LOCAL_IDENTITIES(only_psk1) },
 
             /* Single option matches */
-            { .match = true, WIRE_IDENTITIES(only_psk1), LOCAL_IDENTITIES(only_psk1),
-                    .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(only_psk1), LOCAL_IDENTITIES(only_psk1), .wire_match_index = 0, .local_match_index = 0 },
 
             /* Single wire option matches */
-            { .match = true, WIRE_IDENTITIES(only_psk1), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(only_psk2), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 1 },
-            { .match = true, WIRE_IDENTITIES(only_psk3), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 2 },
+            { .match = true, WIRE_IDENTITIES(only_psk1), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(only_psk2), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 1 },
+            { .match = true, WIRE_IDENTITIES(only_psk3), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 2 },
 
             /* Single local option matches */
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk1),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk2),
-                    .wire_match_index = 1, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk3),
-                    .wire_match_index = 2, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk1), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk2), .wire_match_index = 1, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(only_psk3), .wire_match_index = 2, .local_match_index = 0 },
 
             /* Match with multiple wire and local options: choose first local */
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 2, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(reverse_order_list),
-                    .wire_match_index = 2, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(list_without_psk1), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 1 },
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(list_without_psk1),
-                    .wire_match_index = 1, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(list_without_psk1), LOCAL_IDENTITIES(reverse_order_list),
-                    .wire_match_index = 1, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(list_without_psk1),
-                    .wire_match_index = 1, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 2, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(reverse_order_list), .wire_match_index = 2, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(list_without_psk1), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 1 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(list_without_psk1), .wire_match_index = 1, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(list_without_psk1), LOCAL_IDENTITIES(reverse_order_list), .wire_match_index = 1, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(list_without_psk1), .wire_match_index = 1, .local_match_index = 0 },
 
             /* Handle duplicates */
-            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(multiple_psk1),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = false, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(multiple_psk2)},
-            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(all_psks_list),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(multiple_psk1),
-                    .wire_match_index = 0, .local_match_index = 0 },
-            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(reverse_order_list),
-                    .wire_match_index = 0, .local_match_index = 2 },
-            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(multiple_psk1),
-                    .wire_match_index = 2, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(multiple_psk1), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = false, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(multiple_psk2) },
+            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(all_psks_list), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(all_psks_list), LOCAL_IDENTITIES(multiple_psk1), .wire_match_index = 0, .local_match_index = 0 },
+            { .match = true, WIRE_IDENTITIES(multiple_psk1), LOCAL_IDENTITIES(reverse_order_list), .wire_match_index = 0, .local_match_index = 2 },
+            { .match = true, WIRE_IDENTITIES(reverse_order_list), LOCAL_IDENTITIES(multiple_psk1), .wire_match_index = 2, .local_match_index = 0 },
         };
 
         for (size_t i = 0; i < s2n_array_len(test_cases); i++) {
@@ -671,7 +656,7 @@ int main(int argc, char **argv)
             struct s2n_psk *expected_chosen_psk = NULL;
             for (size_t local_i = 0; local_i < test_cases[i].local_identities_len; local_i++) {
                 struct s2n_psk *server_psk = NULL;
-                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &server_psk));
+                EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &server_psk));
                 EXPECT_NOT_NULL(server_psk);
                 EXPECT_SUCCESS(s2n_psk_set_identity(server_psk, test_cases[i].local_identities[local_i]->data,
                         test_cases[i].local_identities[local_i]->size));
@@ -693,7 +678,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&client_identity_list.wire_data));
         }
-    }
+    };
 
     /* Test: s2n_select_resumption_psk */
     {
@@ -707,7 +692,7 @@ int main(int argc, char **argv)
             EXPECT_ERROR_WITH_ERRNO(s2n_select_resumption_psk(conn, NULL), S2N_ERR_NULL);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* One valid resumption psk is received */
         {
@@ -720,7 +705,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             conn->actual_protocol_version = S2N_TLS13;
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 
             DEFER_CLEANUP(struct s2n_stuffer psk_identity = { 0 }, s2n_stuffer_free);
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&psk_identity, 0));
@@ -742,7 +727,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_free(&identity_list.wire_data));
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
-        }
+        };
 
         /* First valid resumption psk is chosen */
         {
@@ -755,7 +740,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             conn->actual_protocol_version = S2N_TLS13;
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 
             DEFER_CLEANUP(struct s2n_stuffer psk_identity = { 0 }, s2n_stuffer_free);
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&psk_identity, 0));
@@ -791,7 +776,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_free(&identity_list.wire_data));
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
-        }
+        };
 
         /* No valid resumption psks */
         {
@@ -799,7 +784,7 @@ int main(int argc, char **argv)
             EXPECT_NOT_NULL(conn);
 
             conn->actual_protocol_version = S2N_TLS13;
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 
             struct s2n_offered_psk_list identity_list = { .conn = conn };
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&identity_list.wire_data, 0));
@@ -812,10 +797,10 @@ int main(int argc, char **argv)
 
             EXPECT_ERROR_WITH_ERRNO(s2n_select_resumption_psk(conn, &identity_list), S2N_ERR_INVALID_SESSION_TICKET);
             EXPECT_NULL(conn->psk_params.chosen_psk);
-        
+
             EXPECT_SUCCESS(s2n_stuffer_free(&identity_list.wire_data));
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* Fail if too many invalid resumption psks */
         {
@@ -828,7 +813,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             conn->actual_protocol_version = S2N_TLS13;
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 
             DEFER_CLEANUP(struct s2n_stuffer psk_identity = { 0 }, s2n_stuffer_free);
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&psk_identity, 0));
@@ -854,8 +839,8 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_free(&identity_list.wire_data));
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
-        }
-    }
+        };
+    };
 
     /* Test: s2n_client_psk_recv_identity_list */
     {
@@ -870,7 +855,7 @@ int main(int argc, char **argv)
             EXPECT_ERROR_WITH_ERRNO(s2n_client_psk_recv_identity_list(NULL, &wire_identities_in), S2N_ERR_NULL);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* Receive an empty list */
         {
@@ -884,7 +869,7 @@ int main(int argc, char **argv)
             EXPECT_NULL(conn->psk_params.chosen_psk);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* Default selection logic: receive a list without a match */
         {
@@ -897,7 +882,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_write_bytes(&wire_identities_in, wire_identities, sizeof(wire_identities)));
 
             struct s2n_psk *no_match_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &no_match_psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &no_match_psk));
             EXPECT_OK(s2n_psk_init(no_match_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(no_match_psk, test_bytes_data_2, sizeof(test_bytes_data_2)));
 
@@ -906,7 +891,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* Default selection logic: receive a list with a match */
         {
@@ -919,7 +904,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_write_bytes(&wire_identities_in, single_wire_identity, sizeof(single_wire_identity)));
 
             struct s2n_psk *match_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &match_psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &match_psk));
             EXPECT_OK(s2n_psk_init(match_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(match_psk, test_bytes_data, sizeof(test_bytes_data)));
 
@@ -929,7 +914,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* Customer selection logic: customer rejects all identities */
         {
@@ -950,7 +935,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* Customer selection logic: customer selects valid identity */
         {
@@ -966,7 +951,7 @@ int main(int argc, char **argv)
             EXPECT_OK(s2n_connection_set_psk_type(conn, S2N_PSK_TYPE_EXTERNAL));
 
             struct s2n_psk *match_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &match_psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &match_psk));
             EXPECT_OK(s2n_psk_init(match_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(match_psk, test_bytes_data, sizeof(test_bytes_data)));
 
@@ -981,7 +966,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* Customer selection logic: customer selects out of bounds index */
         {
@@ -997,7 +982,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             struct s2n_psk *match_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &match_psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &match_psk));
             EXPECT_OK(s2n_psk_init(match_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(match_psk, test_bytes_data, sizeof(test_bytes_data)));
 
@@ -1011,7 +996,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* Customer selection logic: customer selects index without a local match */
         {
@@ -1027,7 +1012,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             struct s2n_psk *local_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &local_psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &local_psk));
             EXPECT_OK(s2n_psk_init(local_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(local_psk, test_bytes_data, sizeof(test_bytes_data)));
 
@@ -1044,7 +1029,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
             EXPECT_SUCCESS(s2n_stuffer_free(&wire_identities_in));
-        }
+        };
 
         /* PSK type is resumption */
         {
@@ -1068,7 +1053,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_connection_set_config(conn, config));
 
             conn->actual_protocol_version = S2N_TLS13;
-            conn->secure.cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+            conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
 
             DEFER_CLEANUP(struct s2n_stuffer psk_identity = { 0 }, s2n_stuffer_free);
             EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&psk_identity, 0));
@@ -1088,8 +1073,8 @@ int main(int argc, char **argv)
 
                 EXPECT_EQUAL(conn->psk_params.chosen_psk_wire_index, 1);
                 EXPECT_NOT_NULL(conn->psk_params.chosen_psk);
-            }
-            
+            };
+
             /* Customer selects a valid resumption psk with a callback */
             {
                 conn->psk_params.chosen_psk = NULL;
@@ -1101,8 +1086,7 @@ int main(int argc, char **argv)
 
                 EXPECT_EQUAL(conn->psk_params.chosen_psk_wire_index, 0);
                 EXPECT_NOT_NULL(conn->psk_params.chosen_psk);
-
-            }
+            };
 
             /* Customer selects an invalid resumption psk with a callback */
             {
@@ -1118,21 +1102,21 @@ int main(int argc, char **argv)
 
                 EXPECT_EQUAL(conn->psk_params.chosen_psk_wire_index, 0);
                 EXPECT_NULL(conn->psk_params.chosen_psk);
-            }
+            };
 
             EXPECT_SUCCESS(s2n_config_free(config_with_cb));
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_config_free(config));
-        }
-    }
+        };
+    };
 
     /* Test: s2n_client_psk_recv_binder_list */
     {
         const uint8_t filler_binders[] = {
-                0x00, /* binder size */
+            0x00, /* binder size */
 
-                0x01, /* binder size */
-                0xFF, /* binder value */
+            0x01, /* binder size */
+            0xFF, /* binder value */
         };
         const size_t zero_length_binder_index = 0;
         const size_t valid_binder_index = 2;
@@ -1182,7 +1166,7 @@ int main(int argc, char **argv)
                     S2N_ERR_BAD_MESSAGE);
 
             EXPECT_SUCCESS(s2n_stuffer_free(&empty_wire_binders_in));
-        }
+        };
 
         /* No chosen identity */
         {
@@ -1192,7 +1176,7 @@ int main(int argc, char **argv)
 
             EXPECT_ERROR_WITH_ERRNO(s2n_client_psk_recv_binder_list(conn, &partial_client_hello, &wire_binders_in),
                     S2N_ERR_NULL);
-        }
+        };
 
         /* Binder list too short for chosen identity index */
         {
@@ -1202,7 +1186,7 @@ int main(int argc, char **argv)
 
             EXPECT_ERROR_WITH_ERRNO(s2n_client_psk_recv_binder_list(conn, &partial_client_hello, &wire_binders_in),
                     S2N_ERR_BAD_MESSAGE);
-        }
+        };
 
         /* Binder for chosen identity is zero-length */
         {
@@ -1212,7 +1196,7 @@ int main(int argc, char **argv)
 
             EXPECT_ERROR_WITH_ERRNO(s2n_client_psk_recv_binder_list(conn, &partial_client_hello, &wire_binders_in),
                     S2N_ERR_SAFETY);
-        }
+        };
 
         /* Binder for chosen identity is invalid */
         {
@@ -1225,7 +1209,7 @@ int main(int argc, char **argv)
 
             EXPECT_ERROR_WITH_ERRNO(s2n_client_psk_recv_binder_list(conn, different_partial_client_hello, &wire_binders_in),
                     S2N_ERR_BAD_MESSAGE);
-        }
+        };
 
         /* Binder for chosen identity is valid */
         {
@@ -1234,11 +1218,11 @@ int main(int argc, char **argv)
             conn->psk_params.chosen_psk_wire_index = valid_binder_index;
 
             EXPECT_OK(s2n_client_psk_recv_binder_list(conn, &partial_client_hello, &wire_binders_in));
-        }
+        };
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
         EXPECT_SUCCESS(s2n_stuffer_free(&wire_binders_in));
-    }
+    };
 
     /* Test: s2n_client_psk_recv */
     {
@@ -1251,8 +1235,8 @@ int main(int argc, char **argv)
         /* Receive an extension with no valid identity */
         {
             const uint8_t extension_data[] = {
-                    0x00, 0x00,             /* identity list size */
-                    0x00, 0x00,             /* binder list size */
+                0x00, 0x00, /* identity list size */
+                0x00, 0x00, /* binder list size */
             };
 
             struct s2n_connection *conn;
@@ -1280,7 +1264,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&extension));
-        }
+        };
 
         /* Receive an extension with an invalid binder */
         /* Receive an extension when running with TLS1.2 */
@@ -1288,11 +1272,11 @@ int main(int argc, char **argv)
             const uint8_t identity = 0x12;
             const uint8_t identity_bytes[] = { identity };
             const uint8_t extension_data[] = {
-                    0x00, 0x07,             /* identity list size */
-                    0x00, 0x01,             /* identity size */
-                    identity,               /* identity */
-                    0x00, 0x00, 0x00, 0x00, /* ticket_age */
-                    0x00, 0x00,             /* binder list size */
+                0x00, 0x07,             /* identity list size */
+                0x00, 0x01,             /* identity size */
+                identity,               /* identity */
+                0x00, 0x00, 0x00, 0x00, /* ticket_age */
+                0x00, 0x00,             /* binder list size */
             };
 
             struct s2n_connection *conn;
@@ -1315,7 +1299,7 @@ int main(int argc, char **argv)
             EXPECT_SUCCESS(s2n_stuffer_write_bytes(&extension, extension_data, sizeof(extension_data)));
 
             struct s2n_psk *psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void**) &psk));
+            EXPECT_OK(s2n_array_pushback(&conn->psk_params.psk_list, (void **) &psk));
             EXPECT_OK(s2n_psk_init(psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(psk, identity_bytes, sizeof(identity_bytes)));
 
@@ -1331,7 +1315,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&extension));
-        }
+        };
 
         /* Receive a psk extension with no psk_ke_modes extension */
         {
@@ -1354,7 +1338,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&extension));
-        }
+        };
 
         /* Receive a psk extension with an unknown psk key exchange mode */
         {
@@ -1377,7 +1361,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&extension));
-        }
+        };
 
         /* Receive a psk extension and a psk key exchange extension with (EC)DHE key establishment but no 
          * keyshare_extension */
@@ -1401,7 +1385,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
             EXPECT_SUCCESS(s2n_stuffer_free(&extension));
-        }
+        };
 
         /* The extension does not appear last in the extension list */
         {
@@ -1421,14 +1405,14 @@ int main(int argc, char **argv)
             EXPECT_FAILURE_WITH_ERRNO(s2n_client_psk_recv(conn, &extension), S2N_ERR_UNSUPPORTED_EXTENSION);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* Receive a valid extension */
         {
             const uint8_t client_hello_prefix_data[] = {
-                    0x01,               /* Message Type: ClientHello */
-                    0x00, 0x00, 0x00,   /* Message size: not set yet */
-                    0x12, 0x34, 0x56,   /* Message: random data */
+                0x01,             /* Message Type: ClientHello */
+                0x00, 0x00, 0x00, /* Message size: not set yet */
+                0x12, 0x34, 0x56, /* Message: random data */
             };
 
             struct s2n_connection *client_conn;
@@ -1447,17 +1431,17 @@ int main(int argc, char **argv)
             S2N_CBIT_SET(server_conn->extension_requests_received, key_share_id);
 
             struct s2n_psk *shared_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void**) &shared_psk));
+            EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void **) &shared_psk));
             EXPECT_OK(s2n_psk_init(shared_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(shared_psk, test_identity, sizeof(test_identity)));
             EXPECT_SUCCESS(s2n_psk_set_secret(shared_psk, test_secret, sizeof(test_secret)));
-            EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void**) &shared_psk));
+            EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void **) &shared_psk));
             EXPECT_OK(s2n_psk_init(shared_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(shared_psk, test_identity, sizeof(test_identity)));
             EXPECT_SUCCESS(s2n_psk_set_secret(shared_psk, test_secret, sizeof(test_secret)));
 
             struct s2n_psk *other_server_psk = NULL;
-            EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void**) &other_server_psk));
+            EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void **) &other_server_psk));
             EXPECT_OK(s2n_psk_init(other_server_psk, S2N_PSK_TYPE_EXTERNAL));
             EXPECT_SUCCESS(s2n_psk_set_identity(other_server_psk, test_identity_2, sizeof(test_identity_2)));
 
@@ -1479,8 +1463,8 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
-        }
-    }
+        };
+    };
 
     /* Functional test */
     if (s2n_is_tls13_fully_supported()) {
@@ -1501,7 +1485,7 @@ int main(int argc, char **argv)
         /* Setup other client PSK */
         uint8_t other_client_data[] = "other client data";
         struct s2n_psk *other_client_psk = NULL;
-        EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void**) &other_client_psk));
+        EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void **) &other_client_psk));
         EXPECT_OK(s2n_psk_init(other_client_psk, S2N_PSK_TYPE_EXTERNAL));
         EXPECT_SUCCESS(s2n_psk_set_identity(other_client_psk, other_client_data, sizeof(other_client_data)));
         EXPECT_SUCCESS(s2n_psk_set_secret(other_client_psk, other_client_data, sizeof(other_client_data)));
@@ -1509,20 +1493,20 @@ int main(int argc, char **argv)
         /* Setup other server PSK */
         uint8_t other_server_data[] = "other server data";
         struct s2n_psk *other_server_psk = NULL;
-        EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void**) &other_server_psk));
+        EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void **) &other_server_psk));
         EXPECT_OK(s2n_psk_init(other_server_psk, S2N_PSK_TYPE_EXTERNAL));
         EXPECT_SUCCESS(s2n_psk_set_identity(other_server_psk, other_server_data, sizeof(other_server_data)));
         EXPECT_SUCCESS(s2n_psk_set_secret(other_server_psk, other_server_data, sizeof(other_server_data)));
 
         /* Setup shared PSK for client */
         struct s2n_psk *shared_psk = NULL;
-        EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void**) &shared_psk));
+        EXPECT_OK(s2n_array_pushback(&client_conn->psk_params.psk_list, (void **) &shared_psk));
         EXPECT_OK(s2n_psk_init(shared_psk, S2N_PSK_TYPE_EXTERNAL));
         EXPECT_SUCCESS(s2n_psk_set_identity(shared_psk, test_identity, sizeof(test_identity)));
         EXPECT_SUCCESS(s2n_psk_set_secret(shared_psk, test_secret, sizeof(test_secret)));
 
         /* Setup shared PSK for server */
-        EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void**) &shared_psk));
+        EXPECT_OK(s2n_array_pushback(&server_conn->psk_params.psk_list, (void **) &shared_psk));
         EXPECT_OK(s2n_psk_init(shared_psk, S2N_PSK_TYPE_EXTERNAL));
         EXPECT_SUCCESS(s2n_psk_set_identity(shared_psk, test_identity, sizeof(test_identity)));
         EXPECT_SUCCESS(s2n_psk_set_secret(shared_psk, test_secret, sizeof(test_secret)));
@@ -1541,6 +1525,132 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_free(server_conn));
         EXPECT_SUCCESS(s2n_connection_free(client_conn));
         EXPECT_SUCCESS(s2n_io_pair_close(&io_pair));
+    }
+
+    /**
+     * Ensure obfuscated_ticket_age and binder values are updated on a client hello after a HRR
+     *
+     *= https://tools.ietf.org/rfc/rfc8446#section-4.1.2
+     *= type=test
+     *# -   Updating the "pre_shared_key" extension if present by recomputing
+     *#     the "obfuscated_ticket_age" and binder values and (optionally)
+     *#     removing any PSKs which are incompatible with the server's
+     *#     indicated cipher suite.
+     **/
+    if (s2n_is_tls13_fully_supported()) {
+        DEFER_CLEANUP(struct s2n_cert_chain_and_key *chain_and_key = NULL,
+                s2n_cert_chain_and_key_ptr_free);
+        EXPECT_SUCCESS(s2n_test_cert_chain_and_key_new(&chain_and_key,
+                S2N_DEFAULT_ECDSA_TEST_CERT_CHAIN,
+                S2N_DEFAULT_ECDSA_TEST_PRIVATE_KEY));
+
+        DEFER_CLEANUP(struct s2n_config *config = s2n_config_new(),
+                s2n_config_ptr_free);
+        EXPECT_SUCCESS(s2n_config_add_cert_chain_and_key_to_store(config, chain_and_key));
+        EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "default_tls13"));
+        EXPECT_SUCCESS(s2n_config_disable_x509_verification(config));
+        EXPECT_SUCCESS(s2n_setup_ticket_key(config));
+
+        DEFER_CLEANUP(struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER),
+                s2n_connection_ptr_free);
+        EXPECT_NOT_NULL(server_conn);
+        EXPECT_SUCCESS(s2n_connection_set_config(server_conn, config));
+
+        DEFER_CLEANUP(struct s2n_connection *client_conn = s2n_connection_new(S2N_CLIENT),
+                s2n_connection_ptr_free);
+        EXPECT_NOT_NULL(client_conn);
+        EXPECT_SUCCESS(s2n_connection_set_config(client_conn, config));
+
+        DEFER_CLEANUP(struct s2n_stuffer io_stuffer = { 0 }, s2n_stuffer_free);
+        EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&io_stuffer, 0));
+        EXPECT_SUCCESS(s2n_connection_set_io_stuffers(&io_stuffer, &io_stuffer, client_conn));
+        EXPECT_SUCCESS(s2n_connection_set_io_stuffers(&io_stuffer, &io_stuffer, server_conn));
+
+        /* Force the HRR path */
+        client_conn->security_policy_override = &security_policy_test_tls13_retry;
+
+        client_conn->secure->cipher_suite = &s2n_tls13_aes_128_gcm_sha256;
+
+        /* Set a resumption psk */
+        DEFER_CLEANUP(struct s2n_stuffer psk_identity = { 0 }, s2n_stuffer_free);
+        EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&psk_identity, 0));
+        EXPECT_OK(s2n_setup_encrypted_ticket(client_conn, &psk_identity));
+        struct s2n_offered_psk_list identity_list = { .conn = client_conn };
+        EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&identity_list.wire_data, 0));
+        EXPECT_OK(s2n_write_test_identity(&identity_list.wire_data, &psk_identity.blob));
+        EXPECT_OK(s2n_select_resumption_psk(server_conn, &identity_list));
+
+        /* Set the ticket issue time to be 10 milliseconds ago, so the obfuscated ticket age will be non-zero */
+        struct s2n_psk *psk = client_conn->psk_params.chosen_psk;
+        psk->ticket_issue_time -= MILLIS_TO_NANOS(10);
+
+        /* Calculate the size of the identity without the key name. Used to first seek to the key name as the target for
+         * s2n_stuffer_skip_read_until, and then seek to the end of the identity. */
+        const unsigned long identity_data_size = psk->identity.size - strlen((char *) psk->identity.data);
+
+        s2n_blocked_status blocked = 0;
+
+        /* Client sends ClientHello 1 */
+        EXPECT_OK(s2n_negotiate_until_message(client_conn, &blocked, SERVER_HELLO));
+
+        /* Read the obfuscated ticket age from ClientHello 1 */
+        EXPECT_SUCCESS(s2n_stuffer_skip_read_until(&io_stuffer, (char *) psk->identity.data));
+        EXPECT_SUCCESS(s2n_stuffer_skip_read(&io_stuffer, identity_data_size));
+        uint32_t obfuscated_ticket_age_1 = 0;
+        EXPECT_SUCCESS(s2n_stuffer_read_uint32(&io_stuffer, &obfuscated_ticket_age_1));
+
+        /* Skip over the size of the binders list */
+        EXPECT_SUCCESS(s2n_stuffer_skip_read(&io_stuffer, sizeof(uint16_t)));
+
+        /* Ensure the binder size is as expected */
+        uint8_t binder_1_size = 0;
+        EXPECT_SUCCESS(s2n_stuffer_read_uint8(&io_stuffer, &binder_1_size));
+        EXPECT_TRUE(binder_1_size == BINDER_SIZE);
+
+        /* Read the binder from ClientHello 1 */
+        uint8_t binder_1[BINDER_SIZE] = { 0 };
+        EXPECT_SUCCESS(s2n_stuffer_read_bytes(&io_stuffer, binder_1, BINDER_SIZE));
+        EXPECT_SUCCESS(s2n_stuffer_reread(&io_stuffer));
+
+        /* Ensure that the ticket age and binder are non-zero */
+        EXPECT_TRUE(obfuscated_ticket_age_1 != 0);
+        uint8_t zero_array[BINDER_SIZE] = { 0 };
+        EXPECT_FALSE(s2n_constant_time_equals(binder_1, zero_array, BINDER_SIZE));
+
+        /* Skip to before the client sends ClientHello 2 */
+        EXPECT_OK(s2n_negotiate_until_message(server_conn, &blocked, HELLO_RETRY_MSG));
+        EXPECT_OK(s2n_negotiate_until_message(server_conn, &blocked, CLIENT_HELLO));
+        EXPECT_OK(s2n_negotiate_until_message(client_conn, &blocked, CLIENT_HELLO));
+
+        /* Change the ticket issue time so a new obfuscated ticket age will change */
+        psk->ticket_issue_time -= MILLIS_TO_NANOS(1);
+
+        /* Client sends ClientHello 2 */
+        EXPECT_OK(s2n_negotiate_until_message(client_conn, &blocked, SERVER_HELLO));
+
+        /* Read the obfuscated ticket age from ClientHello 2 */
+        EXPECT_SUCCESS(s2n_stuffer_skip_read_until(&io_stuffer, (char *) psk->identity.data));
+        EXPECT_SUCCESS(s2n_stuffer_skip_read(&io_stuffer, identity_data_size));
+        uint32_t obfuscated_ticket_age_2 = 0;
+        EXPECT_SUCCESS(s2n_stuffer_read_uint32(&io_stuffer, &obfuscated_ticket_age_2));
+
+        /* Skip over the size of the binders list */
+        EXPECT_SUCCESS(s2n_stuffer_skip_read(&io_stuffer, sizeof(uint16_t)));
+
+        /* Ensure the binder size is as expected */
+        uint8_t binder_2_size = 0;
+        EXPECT_SUCCESS(s2n_stuffer_read_uint8(&io_stuffer, &binder_2_size));
+        EXPECT_TRUE(binder_2_size == BINDER_SIZE);
+
+        /* Read the binder from ClientHello 2 */
+        uint8_t binder_2[BINDER_SIZE] = { 0 };
+        EXPECT_SUCCESS(s2n_stuffer_read_bytes(&io_stuffer, binder_2, BINDER_SIZE));
+
+        /* Ensure that the ticket age and binder were updated after ClientHello 2 */
+        EXPECT_TRUE(obfuscated_ticket_age_1 != obfuscated_ticket_age_2);
+        EXPECT_FALSE(s2n_constant_time_equals(binder_1, binder_2, BINDER_SIZE));
+
+        EXPECT_SUCCESS(s2n_stuffer_free(&identity_list.wire_data));
     }
 
     END_TEST();

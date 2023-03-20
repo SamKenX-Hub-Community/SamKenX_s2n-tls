@@ -3,6 +3,8 @@
 #include "kyber512r3_ntt.h"
 #include "kyber512r3_reduce.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 const int16_t zetas[128] = {
     2285, 2571, 2970, 1812, 1493, 1422, 287, 202, 3158, 622, 1577, 182, 962,
     2127, 1855, 1468, 573, 2004, 264, 383, 2500, 1458, 1727, 3199, 2648, 1017,

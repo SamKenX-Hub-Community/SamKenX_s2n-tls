@@ -17,14 +17,12 @@
 #include <openssl/evp.h>
 
 #include "crypto/s2n_cipher.h"
-
 #include "tls/s2n_crypto.h"
-
-#include "utils/s2n_safety.h"
 #include "utils/s2n_blob.h"
+#include "utils/s2n_safety.h"
 
 #if defined(OPENSSL_IS_BORINGSSL) || defined(OPENSSL_IS_AWSLC)
-#define S2N_AEAD_AES_GCM_AVAILABLE
+    #define S2N_AEAD_AES_GCM_AVAILABLE
 #endif
 
 static uint8_t s2n_aead_cipher_aes128_gcm_available()
@@ -62,6 +60,7 @@ static int s2n_aead_cipher_aes_gcm_encrypt(struct s2n_session_key *key, struct s
 
     /* Adjust input length to account for the Tag length */
     size_t in_len = in->size - S2N_TLS_GCM_TAG_LEN;
+    /* out_len is set by EVP_AEAD_CTX_seal and checked post operation */
     size_t out_len = 0;
 
     POSIX_GUARD_OSSL(EVP_AEAD_CTX_seal(key->evp_aead_ctx, out->data, &out_len, out->size, iv->data, iv->size, in->data, in_len, aad->data, aad->size), S2N_ERR_ENCRYPT);
@@ -83,6 +82,7 @@ static int s2n_aead_cipher_aes_gcm_decrypt(struct s2n_session_key *key, struct s
     POSIX_ENSURE_GTE(out->size, in->size - S2N_TLS_GCM_TAG_LEN);
     POSIX_ENSURE_EQ(iv->size, S2N_TLS_GCM_IV_LEN);
 
+    /* out_len is set by EVP_AEAD_CTX_open and checked post operation */
     size_t out_len = 0;
 
     POSIX_GUARD_OSSL(EVP_AEAD_CTX_open(key->evp_aead_ctx, out->data, &out_len, out->size, iv->data, iv->size, in->data, in->size, aad->data, aad->size), S2N_ERR_DECRYPT);
@@ -210,7 +210,7 @@ static int s2n_aead_cipher_aes_gcm_destroy_key(struct s2n_session_key *key)
 
 static int s2n_aead_cipher_aes_gcm_encrypt(struct s2n_session_key *key, struct s2n_blob *iv, struct s2n_blob *aad, struct s2n_blob *in, struct s2n_blob *out)
 {
-    /* The size of the |in| blob includes the size of the data and the size of the ChaCha20-Poly1305 tag */
+    /* The size of the |in| blob includes the size of the data and the size of the AES-GCM tag */
     POSIX_ENSURE_GTE(in->size, S2N_TLS_GCM_TAG_LEN);
     POSIX_ENSURE_GTE(out->size, in->size);
     POSIX_ENSURE_EQ(iv->size, S2N_TLS_GCM_IV_LEN);
@@ -222,7 +222,8 @@ static int s2n_aead_cipher_aes_gcm_encrypt(struct s2n_session_key *key, struct s
     int in_len = in->size - S2N_TLS_GCM_TAG_LEN;
     uint8_t *tag_data = out->data + out->size - S2N_TLS_GCM_TAG_LEN;
 
-    int out_len;
+    /* out_len is set by EVP_EncryptUpdate and checked post operation */
+    int out_len = 0;
     /* Specify the AAD */
     POSIX_GUARD_OSSL(EVP_EncryptUpdate(key->evp_cipher_ctx, NULL, &out_len, aad->data, aad->size), S2N_ERR_ENCRYPT);
 
@@ -260,7 +261,10 @@ static int s2n_aead_cipher_aes_gcm_decrypt(struct s2n_session_key *key, struct s
     /* Set the TAG */
     POSIX_GUARD_OSSL(EVP_CIPHER_CTX_ctrl(key->evp_cipher_ctx, EVP_CTRL_GCM_SET_TAG, S2N_TLS_GCM_TAG_LEN, tag_data), S2N_ERR_DECRYPT);
 
-    int out_len;
+    /* out_len is set by EVP_DecryptUpdate. While we verify the content of out_len in
+     * s2n_aead_chacha20_poly1305_encrypt, we refrain from this here. This is to avoid
+     * doing any branching before the ciphertext is verified. */
+    int out_len = 0;
     /* Specify the AAD */
     POSIX_GUARD_OSSL(EVP_DecryptUpdate(key->evp_cipher_ctx, NULL, &out_len, aad->data, aad->size), S2N_ERR_DECRYPT);
 
@@ -272,8 +276,6 @@ static int s2n_aead_cipher_aes_gcm_decrypt(struct s2n_session_key *key, struct s
     evp_decrypt_rc &= EVP_DecryptFinal_ex(key->evp_cipher_ctx, out->data, &out_len);
 
     S2N_ERROR_IF(evp_decrypt_rc != 1, S2N_ERR_DECRYPT);
-
-    /* While we verify the content of out_len in s2n_aead_cipher_aes_gcm_encrypt, we refrain from this here. This is to avoid doing any branching before the ciphertext is verified. */
 
     return S2N_SUCCESS;
 }
@@ -374,31 +376,32 @@ static int s2n_aead_cipher_aes_gcm_destroy_key(struct s2n_session_key *key)
 
 #endif
 
-struct s2n_cipher s2n_aes128_gcm = {
+const struct s2n_cipher s2n_aes128_gcm = {
     .key_material_size = S2N_TLS_AES_128_GCM_KEY_LEN,
     .type = S2N_AEAD,
     .io.aead = {
-                .record_iv_size = S2N_TLS_GCM_EXPLICIT_IV_LEN,
-                .fixed_iv_size = S2N_TLS_GCM_FIXED_IV_LEN,
-                .tag_size = S2N_TLS_GCM_TAG_LEN,
-                .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
-                .encrypt = s2n_aead_cipher_aes_gcm_encrypt},
+            .record_iv_size = S2N_TLS_GCM_EXPLICIT_IV_LEN,
+            .fixed_iv_size = S2N_TLS_GCM_FIXED_IV_LEN,
+            .tag_size = S2N_TLS_GCM_TAG_LEN,
+            .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
+            .encrypt = s2n_aead_cipher_aes_gcm_encrypt },
     .is_available = s2n_aead_cipher_aes128_gcm_available,
     .init = s2n_aead_cipher_aes_gcm_init,
     .set_encryption_key = s2n_aead_cipher_aes128_gcm_set_encryption_key,
     .set_decryption_key = s2n_aead_cipher_aes128_gcm_set_decryption_key,
     .destroy_key = s2n_aead_cipher_aes_gcm_destroy_key,
+    .ktls_supported = true,
 };
 
-struct s2n_cipher s2n_aes256_gcm = {
+const struct s2n_cipher s2n_aes256_gcm = {
     .key_material_size = S2N_TLS_AES_256_GCM_KEY_LEN,
     .type = S2N_AEAD,
     .io.aead = {
-                .record_iv_size = S2N_TLS_GCM_EXPLICIT_IV_LEN,
-                .fixed_iv_size = S2N_TLS_GCM_FIXED_IV_LEN,
-                .tag_size = S2N_TLS_GCM_TAG_LEN,
-                .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
-                .encrypt = s2n_aead_cipher_aes_gcm_encrypt},
+            .record_iv_size = S2N_TLS_GCM_EXPLICIT_IV_LEN,
+            .fixed_iv_size = S2N_TLS_GCM_FIXED_IV_LEN,
+            .tag_size = S2N_TLS_GCM_TAG_LEN,
+            .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
+            .encrypt = s2n_aead_cipher_aes_gcm_encrypt },
     .is_available = s2n_aead_cipher_aes256_gcm_available,
     .init = s2n_aead_cipher_aes_gcm_init,
     .set_encryption_key = s2n_aead_cipher_aes256_gcm_set_encryption_key,
@@ -407,15 +410,15 @@ struct s2n_cipher s2n_aes256_gcm = {
 };
 
 /* TLS 1.3 GCM ciphers */
-struct s2n_cipher s2n_tls13_aes128_gcm = {
+const struct s2n_cipher s2n_tls13_aes128_gcm = {
     .key_material_size = S2N_TLS_AES_128_GCM_KEY_LEN,
     .type = S2N_AEAD,
     .io.aead = {
-                .record_iv_size = S2N_TLS13_RECORD_IV_LEN,
-                .fixed_iv_size = S2N_TLS13_FIXED_IV_LEN,
-                .tag_size = S2N_TLS_GCM_TAG_LEN,
-                .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
-                .encrypt = s2n_aead_cipher_aes_gcm_encrypt},
+            .record_iv_size = S2N_TLS13_RECORD_IV_LEN,
+            .fixed_iv_size = S2N_TLS13_FIXED_IV_LEN,
+            .tag_size = S2N_TLS_GCM_TAG_LEN,
+            .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
+            .encrypt = s2n_aead_cipher_aes_gcm_encrypt },
     .is_available = s2n_aead_cipher_aes128_gcm_available,
     .init = s2n_aead_cipher_aes_gcm_init,
     .set_encryption_key = s2n_aead_cipher_aes128_gcm_set_encryption_key_tls13,
@@ -423,15 +426,15 @@ struct s2n_cipher s2n_tls13_aes128_gcm = {
     .destroy_key = s2n_aead_cipher_aes_gcm_destroy_key,
 };
 
-struct s2n_cipher s2n_tls13_aes256_gcm = {
+const struct s2n_cipher s2n_tls13_aes256_gcm = {
     .key_material_size = S2N_TLS_AES_256_GCM_KEY_LEN,
     .type = S2N_AEAD,
     .io.aead = {
-                .record_iv_size = S2N_TLS13_RECORD_IV_LEN,
-                .fixed_iv_size = S2N_TLS13_FIXED_IV_LEN,
-                .tag_size = S2N_TLS_GCM_TAG_LEN,
-                .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
-                .encrypt = s2n_aead_cipher_aes_gcm_encrypt},
+            .record_iv_size = S2N_TLS13_RECORD_IV_LEN,
+            .fixed_iv_size = S2N_TLS13_FIXED_IV_LEN,
+            .tag_size = S2N_TLS_GCM_TAG_LEN,
+            .decrypt = s2n_aead_cipher_aes_gcm_decrypt,
+            .encrypt = s2n_aead_cipher_aes_gcm_encrypt },
     .is_available = s2n_aead_cipher_aes256_gcm_available,
     .init = s2n_aead_cipher_aes_gcm_init,
     .set_encryption_key = s2n_aead_cipher_aes256_gcm_set_encryption_key_tls13,

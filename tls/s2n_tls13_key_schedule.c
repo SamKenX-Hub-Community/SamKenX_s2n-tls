@@ -34,13 +34,14 @@ static const struct s2n_blob s2n_zero_length_context = { 0 };
 static S2N_RESULT s2n_zero_sequence_number(struct s2n_connection *conn, s2n_mode mode)
 {
     RESULT_ENSURE_REF(conn);
-    struct s2n_blob sequence_number;
+    RESULT_ENSURE_REF(conn->secure);
+    struct s2n_blob sequence_number = { 0 };
     if (mode == S2N_CLIENT) {
         RESULT_GUARD_POSIX(s2n_blob_init(&sequence_number,
-                conn->secure.client_sequence_number, sizeof(conn->secure.client_sequence_number)));
+                conn->secure->client_sequence_number, sizeof(conn->secure->client_sequence_number)));
     } else {
         RESULT_GUARD_POSIX(s2n_blob_init(&sequence_number,
-                conn->secure.server_sequence_number, sizeof(conn->secure.server_sequence_number)));
+                conn->secure->server_sequence_number, sizeof(conn->secure->server_sequence_number)));
     }
     RESULT_GUARD_POSIX(s2n_blob_zero(&sequence_number));
     return S2N_RESULT_OK;
@@ -49,22 +50,23 @@ static S2N_RESULT s2n_zero_sequence_number(struct s2n_connection *conn, s2n_mode
 static S2N_RESULT s2n_set_key(struct s2n_connection *conn, s2n_extract_secret_type_t secret_type, s2n_mode mode)
 {
     RESULT_ENSURE_REF(conn);
-    RESULT_ENSURE_REF(conn->secure.cipher_suite);
-    const struct s2n_cipher_suite *cipher_suite = conn->secure.cipher_suite;
-    RESULT_ENSURE_REF(conn->secure.cipher_suite->record_alg);
-    RESULT_ENSURE_REF(conn->secure.cipher_suite->record_alg->cipher);
-    const struct s2n_cipher *cipher = conn->secure.cipher_suite->record_alg->cipher;
+    RESULT_ENSURE_REF(conn->secure);
+    RESULT_ENSURE_REF(conn->secure->cipher_suite);
+    const struct s2n_cipher_suite *cipher_suite = conn->secure->cipher_suite;
+    RESULT_ENSURE_REF(conn->secure->cipher_suite->record_alg);
+    RESULT_ENSURE_REF(conn->secure->cipher_suite->record_alg->cipher);
+    const struct s2n_cipher *cipher = conn->secure->cipher_suite->record_alg->cipher;
 
     uint8_t *implicit_iv_data = NULL;
     struct s2n_session_key *session_key = NULL;
     if (mode == S2N_CLIENT) {
-        implicit_iv_data = conn->secure.client_implicit_iv;
-        session_key = &conn->secure.client_key;
-        conn->client = &conn->secure;
+        implicit_iv_data = conn->secure->client_implicit_iv;
+        session_key = &conn->secure->client_key;
+        conn->client = conn->secure;
     } else {
-        implicit_iv_data = conn->secure.server_implicit_iv;
-        session_key = &conn->secure.server_key;
-        conn->server = &conn->secure;
+        implicit_iv_data = conn->secure->server_implicit_iv;
+        session_key = &conn->secure->server_key;
+        conn->server = conn->secure;
     }
 
     /**
@@ -147,6 +149,8 @@ static S2N_RESULT s2n_set_key(struct s2n_connection *conn, s2n_extract_secret_ty
 
 static S2N_RESULT s2n_client_key_schedule(struct s2n_connection *conn)
 {
+    RESULT_ENSURE_REF(conn);
+
     message_type_t message_type = s2n_conn_get_current_message_type(conn);
 
     /**
@@ -222,6 +226,8 @@ static S2N_RESULT s2n_client_key_schedule(struct s2n_connection *conn)
 
 static S2N_RESULT s2n_server_key_schedule(struct s2n_connection *conn)
 {
+    RESULT_ENSURE_REF(conn);
+
     message_type_t message_type = s2n_conn_get_current_message_type(conn);
 
     /**
@@ -249,6 +255,7 @@ static S2N_RESULT s2n_server_key_schedule(struct s2n_connection *conn)
      */
     if (message_type == SERVER_FINISHED) {
         K_send(conn, S2N_APPLICATION_SECRET);
+        /* clang-format off */
     /**
      *= https://tools.ietf.org/rfc/rfc8446#appendix-A.2
      *# here                  +--------+--------+
@@ -256,6 +263,7 @@ static S2N_RESULT s2n_server_key_schedule(struct s2n_connection *conn)
      *#                       |                 |
      *#   K_recv = handshake  |                 | K_recv = early data
      */
+        /* clang-format on */
         if (WITH_EARLY_DATA(conn)) {
             K_recv(conn, S2N_EARLY_SECRET);
         } else {
@@ -302,7 +310,7 @@ static S2N_RESULT s2n_server_key_schedule(struct s2n_connection *conn)
     return S2N_RESULT_OK;
 }
 
-s2n_result (*key_schedules[])(struct s2n_connection*) = {
+s2n_result (*key_schedules[])(struct s2n_connection *) = {
     [S2N_CLIENT] = &s2n_client_key_schedule,
     [S2N_SERVER] = &s2n_server_key_schedule,
 };
@@ -321,8 +329,9 @@ S2N_RESULT s2n_tls13_key_schedule_update(struct s2n_connection *conn)
 S2N_RESULT s2n_tls13_key_schedule_reset(struct s2n_connection *conn)
 {
     RESULT_ENSURE_REF(conn);
-    conn->client = &conn->initial;
-    conn->server = &conn->initial;
+    RESULT_ENSURE_REF(conn->initial);
+    conn->client = conn->initial;
+    conn->server = conn->initial;
     conn->secrets.tls13.extract_secret_type = S2N_NONE_SECRET;
     return S2N_RESULT_OK;
 }

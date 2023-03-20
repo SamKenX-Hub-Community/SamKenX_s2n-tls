@@ -15,9 +15,8 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include <openssl/x509.h>
+#include <stdint.h>
 
 #include "api/s2n.h"
 #include "crypto/s2n_pkey.h"
@@ -60,8 +59,6 @@ struct certs_by_type {
     struct s2n_cert_chain_and_key *certs[S2N_CERT_TYPE_COUNT];
 };
 
-int s2n_cert_chain_and_key_set_ocsp_data(struct s2n_cert_chain_and_key *chain_and_key, const uint8_t *data, uint32_t length);
-int s2n_cert_chain_and_key_set_sct_list(struct s2n_cert_chain_and_key *chain_and_key, const uint8_t *data, uint32_t length);
 /* Exposed for fuzzing */
 int s2n_cert_chain_and_key_load_cns(struct s2n_cert_chain_and_key *chain_and_key, X509 *x509_cert);
 int s2n_cert_chain_and_key_load_sans(struct s2n_cert_chain_and_key *chain_and_key, X509 *x509_cert);

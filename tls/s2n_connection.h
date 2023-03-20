@@ -16,12 +16,13 @@
 #pragma once
 
 #include <errno.h>
-#include "api/s2n.h"
 #include <signal.h>
 #include <stdint.h>
 
+#include "api/s2n.h"
+#include "crypto/s2n_hash.h"
+#include "crypto/s2n_hmac.h"
 #include "stuffer/s2n_stuffer.h"
-
 #include "tls/s2n_client_hello.h"
 #include "tls/s2n_config.h"
 #include "tls/s2n_crypto.h"
@@ -30,20 +31,18 @@
 #include "tls/s2n_handshake.h"
 #include "tls/s2n_kem_preferences.h"
 #include "tls/s2n_key_update.h"
+#include "tls/s2n_post_handshake.h"
 #include "tls/s2n_prf.h"
 #include "tls/s2n_quic_support.h"
 #include "tls/s2n_record.h"
+#include "tls/s2n_resume.h"
 #include "tls/s2n_security_policies.h"
 #include "tls/s2n_tls_parameters.h"
 #include "tls/s2n_x509_validator.h"
-
-#include "crypto/s2n_hash.h"
-#include "crypto/s2n_hmac.h"
-
 #include "utils/s2n_mem.h"
 #include "utils/s2n_timer.h"
 
-#define S2N_TLS_PROTOCOL_VERSION_LEN    2
+#define S2N_TLS_PROTOCOL_VERSION_LEN 2
 
 #define S2N_PEER_MODE(our_mode) ((our_mode + 1) % 2)
 
@@ -59,16 +58,16 @@ struct s2n_connection {
     /* Is this connection using CORK/SO_RCVLOWAT optimizations? Only valid when the connection is using
      * managed_send_io
      */
-    unsigned corked_io:1;
+    unsigned corked_io : 1;
 
     /* Session resumption indicator on client side */
-    unsigned client_session_resumed:1;
+    unsigned client_session_resumed : 1;
 
     /* Connection can be used by a QUIC implementation */
-    unsigned quic_enabled:1;
+    unsigned quic_enabled : 1;
 
     /* Determines if we're currently sending or receiving in s2n_shutdown */
-    unsigned close_notify_queued:1;
+    unsigned close_notify_queued : 1;
 
     /* s2n does not support renegotiation.
      * RFC5746 Section 4.3 suggests servers implement a minimal version of the
@@ -76,52 +75,71 @@ struct s2n_connection {
      * Some clients may fail the handshake if a corresponding renegotiation_info
      * extension is not sent back by the server.
      */
-    unsigned secure_renegotiation:1;
+    unsigned secure_renegotiation : 1;
     /* Was the EC point formats sent by the client */
-    unsigned ec_point_formats:1;
+    unsigned ec_point_formats : 1;
 
     /* whether the connection address is ipv6 or not */
-    unsigned ipv6:1;
+    unsigned ipv6 : 1;
 
     /* Whether server_name extension was used to make a decision on cert selection.
      * RFC6066 Section 3 states that server which used server_name to make a decision
      * on certificate or security settings has to send an empty server_name.
      */
-    unsigned server_name_used:1;
+    unsigned server_name_used : 1;
 
     /* If write fd is broken */
-    unsigned write_fd_broken:1;
+    unsigned write_fd_broken : 1;
 
     /* Has the user set their own I/O callbacks or is this connection using the
      * default socket-based I/O set by s2n */
-    unsigned managed_send_io:1;
-    unsigned managed_recv_io:1;
+    unsigned managed_send_io : 1;
+    unsigned managed_recv_io : 1;
 
     /* Key update data */
-    unsigned key_update_pending:1;
+    unsigned key_update_pending : 1;
 
     /* Early data supported by caller.
      * If a caller does not use any APIs that support early data,
      * do not negotiate early data.
      */
-    unsigned early_data_expected:1;
+    unsigned early_data_expected : 1;
 
     /* Connection overrides server_max_early_data_size */
-    unsigned server_max_early_data_size_overridden:1;
+    unsigned server_max_early_data_size_overridden : 1;
 
     /* Connection overrides psk_mode.
      * This means that the connection will keep the existing value of psk_params->type,
      * even when setting a new config. */
-    unsigned psk_mode_overridden:1;
+    unsigned psk_mode_overridden : 1;
 
     /* Have we received a close notify alert from the peer. */
-    unsigned close_notify_received:1;
+    unsigned close_notify_received : 1;
 
     /* Connection negotiated an EMS */
-    unsigned ems_negotiated:1;
+    unsigned ems_negotiated : 1;
 
     /* Connection successfully set a ticket on the connection */
-    unsigned set_session:1;
+    unsigned set_session : 1;
+
+    /* Buffer multiple records before flushing them.
+     * This allows multiple records to be written with one socket send. */
+    unsigned multirecord_send : 1;
+
+    /* If enabled, this connection will free each of its IO buffers after all data
+     * has been flushed */
+    unsigned dynamic_buffers : 1;
+
+    /* Indicates protocol negotiation will be done through the NPN extension
+     * instead of the ALPN extension */
+    unsigned npn_negotiated : 1;
+
+    /* Marks if kTLS has been enabled for this connection. */
+    unsigned ktls_send_enabled : 1;
+    unsigned ktls_recv_enabled : 1;
+
+    /* Indicates whether the connection should request OCSP stapling from the peer */
+    unsigned request_ocsp_status : 1;
 
     /* The configuration (cert, key .. etc ) */
     struct s2n_config *config;
@@ -144,7 +162,7 @@ struct s2n_connection {
     void *send_io_context;
     void *recv_io_context;
 
-    /* Track request extensions to ensure correct response extension behavior.
+    /* Track request/response extensions to ensure correct response extension behavior.
      *
      * We need to track client and server extensions separately because some
      * extensions (like request_status and other Certificate extensions) can
@@ -152,6 +170,7 @@ struct s2n_connection {
      */
     s2n_extension_bitfield extension_requests_sent;
     s2n_extension_bitfield extension_requests_received;
+    s2n_extension_bitfield extension_responses_received;
 
     /* Is this connection a client or a server connection */
     s2n_mode mode;
@@ -188,8 +207,8 @@ struct s2n_connection {
     uint8_t actual_protocol_version_established;
 
     /* Our crypto parameters */
-    struct s2n_crypto_parameters initial;
-    struct s2n_crypto_parameters secure;
+    struct s2n_crypto_parameters *initial;
+    struct s2n_crypto_parameters *secure;
     union s2n_secrets secrets;
 
     /* Which set is the client/server actually using? */
@@ -226,7 +245,10 @@ struct s2n_connection {
     struct s2n_stuffer header_in;
     struct s2n_stuffer in;
     struct s2n_stuffer out;
-    enum { ENCRYPTED, PLAINTEXT } in_status;
+    enum {
+        ENCRYPTED,
+        PLAINTEXT
+    } in_status;
 
     /* How much of the current user buffer have we already
      * encrypted and sent or have pending for the wire but have
@@ -268,15 +290,16 @@ struct s2n_connection {
      */
     uint16_t max_outgoing_fragment_length;
 
-    /* The number of bytes to send before changing the record size. 
-     * If this value > 0 then dynamic TLS record size is enabled. Otherwise, the feature is disabled (default). 
+    /* The number of bytes to send before changing the record size.
+     * If this value > 0 then dynamic TLS record size is enabled. Otherwise, the feature is disabled (default).
      */
     uint32_t dynamic_record_resize_threshold;
 
     /* Reset record size back to a single segment after threshold seconds of inactivity */
     uint16_t dynamic_record_timeout_threshold;
 
-    /* number of bytes consumed during application activity */
+    /* The number of bytes consumed during a period of application activity.
+     * Used for dynamic record sizing. */
     uint64_t active_application_bytes_consumed;
 
     /* Negotiated TLS extension Maximum Fragment Length code.
@@ -360,7 +383,7 @@ struct s2n_connection {
     bool send_in_use;
     bool recv_in_use;
     bool negotiate_in_use;
-    
+
     uint16_t tickets_to_send;
     uint16_t tickets_sent;
 
@@ -368,6 +391,8 @@ struct s2n_connection {
     uint32_t server_max_early_data_size;
     struct s2n_blob server_early_data_context;
     uint32_t server_keying_material_lifetime;
+
+    struct s2n_post_handshake post_handshake;
 };
 
 S2N_CLEANUP_RESULT s2n_connection_ptr_free(struct s2n_connection **s2n_connection);
@@ -383,6 +408,10 @@ int s2n_connection_send_stuffer(struct s2n_stuffer *stuffer, struct s2n_connecti
 int s2n_connection_recv_stuffer(struct s2n_stuffer *stuffer, struct s2n_connection *conn, uint32_t len);
 
 S2N_RESULT s2n_connection_wipe_all_keyshares(struct s2n_connection *conn);
+
+/* If dynamic buffers are enabled, the IO buffers may be freed if they are completely consumed */
+S2N_RESULT s2n_connection_dynamic_free_in_buffer(struct s2n_connection *conn);
+S2N_RESULT s2n_connection_dynamic_free_out_buffer(struct s2n_connection *conn);
 
 int s2n_connection_get_cipher_preferences(struct s2n_connection *conn, const struct s2n_cipher_preferences **cipher_preferences);
 int s2n_connection_get_security_policy(struct s2n_connection *conn, const struct s2n_security_policy **security_policy);

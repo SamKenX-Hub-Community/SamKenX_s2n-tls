@@ -20,8 +20,6 @@
 #include "api/s2n.h"
 #include "stuffer/s2n_stuffer.h"
 
-void s2n_calculate_stacktrace() {}
-
 void s2n_stuffer_erase_and_read_harness()
 {
     struct s2n_stuffer *stuffer = cbmc_allocate_s2n_stuffer();
@@ -65,5 +63,5 @@ void s2n_stuffer_erase_and_read_harness()
     assert(blob->size == old_blob.size);
 
     assert(s2n_result_is_ok(s2n_stuffer_validate(stuffer)));
-    assert(s2n_result_is_ok(s2n_blob_validate(stuffer)));
+    assert(s2n_result_is_ok(s2n_blob_validate(blob)));
 }

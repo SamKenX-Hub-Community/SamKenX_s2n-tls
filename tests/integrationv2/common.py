@@ -1,7 +1,6 @@
 import os
 import re
 import subprocess
-import string
 import threading
 import itertools
 
@@ -53,7 +52,7 @@ class AvailablePorts(object):
         worker = os.getenv('PYTEST_XDIST_WORKER')
         worker_id = 0
         if worker is not None:
-            worker_id = re.findall('gw(\d+)', worker)
+            worker_id = re.findall(r"gw(\d+)", worker)
             if len(worker_id) != 0:
                 worker_id = int(worker_id[0])
 
@@ -306,6 +305,11 @@ class Ciphers(object):
         "PQ-SIKE-TEST-TLS-1-0-2020-02", Protocols.TLS10, False, False, s2n=True, pq=True)
     PQ_TLS_1_0_2020_12 = Cipher(
         "PQ-TLS-1-0-2020-12", Protocols.TLS10, False, False, s2n=True, pq=True)
+    PQ_TLS_1_0_2023_01 = Cipher(
+        "PQ-TLS-1-0-2023-01-24", Protocols.TLS10, False, False, s2n=True, pq=True)
+
+    SECURITY_POLICY_20210816 = Cipher(
+        "20210816", Protocols.TLS12, False, False, s2n=True, pq=False)
 
     @staticmethod
     def from_iana(iana_name):
@@ -351,9 +355,7 @@ class KemGroup(object):
 
 class KemGroups(object):
     # oqs_openssl does not support x25519 based KEM groups
-    P256_KYBER512R2 = KemGroup("p256_kyber512")
-    P256_BIKE1L1FOR2 = KemGroup("p256_bike1l1fo")
-    P256_SIKEP434R3 = KemGroup("p256_sikep434")
+    P256_KYBER512R3 = KemGroup("p256_kyber512")
 
 
 class Signature(object):
@@ -386,6 +388,9 @@ class Signatures(object):
     RSA_SHA256 = Signature('RSA+SHA256', max_protocol=Protocols.TLS12)
     RSA_SHA384 = Signature('RSA+SHA384', max_protocol=Protocols.TLS12)
     RSA_SHA512 = Signature('RSA+SHA512', max_protocol=Protocols.TLS12)
+    RSA_MD5_SHA1 = Signature('RSA+MD5_SHA1', max_protocol=Protocols.TLS11)
+    ECDSA_SHA224 = Signature('ECDSA+SHA224', max_protocol=Protocols.TLS12)
+    ECDSA_SHA1 = Signature('ECDSA+SHA1', max_protocol=Protocols.TLS12)
 
     RSA_PSS_RSAE_SHA256 = Signature(
         'RSA-PSS+SHA256',
@@ -471,7 +476,8 @@ class ProviderOptions(object):
             enable_client_ocsp=False,
             ocsp_response=None,
             signature_algorithm=None,
-            record_size=None
+            record_size=None,
+            verbose=True
     ):
 
         # Client or server
@@ -545,3 +551,9 @@ class ProviderOptions(object):
         self.signature_algorithm = signature_algorithm
 
         self.record_size = record_size
+
+        # How verbose should the provider be when printing to stdout?
+        # Default to more information, leave the option for less.
+        # Useful if you find that debugging information is printed between
+        # application data you expect the provider to print on stdout.
+        self.verbose = verbose

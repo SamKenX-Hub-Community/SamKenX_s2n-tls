@@ -18,9 +18,8 @@
 #include "crypto/s2n_cipher.h"
 #include "crypto/s2n_fips.h"
 #include "crypto/s2n_openssl.h"
-
-#include "utils/s2n_safety.h"
 #include "utils/s2n_blob.h"
+#include "utils/s2n_safety.h"
 
 static uint8_t s2n_stream_cipher_rc4_available()
 {
@@ -40,10 +39,11 @@ static int s2n_stream_cipher_rc4_encrypt(struct s2n_session_key *key, struct s2n
 {
     POSIX_ENSURE_GTE(out->size, in->size);
 
-    int len = out->size;
+    /* len is set by EVP_EncryptUpdate and checked post operation */
+    int len = 0;
     POSIX_GUARD_OSSL(EVP_EncryptUpdate(key->evp_cipher_ctx, out->data, &len, in->data, in->size), S2N_ERR_ENCRYPT);
 
-    S2N_ERROR_IF(len != in->size, S2N_ERR_ENCRYPT);
+    POSIX_ENSURE((int64_t) len == (int64_t) in->size, S2N_ERR_DECRYPT);
 
     return 0;
 }
@@ -52,10 +52,11 @@ static int s2n_stream_cipher_rc4_decrypt(struct s2n_session_key *key, struct s2n
 {
     POSIX_ENSURE_GTE(out->size, in->size);
 
-    int len = out->size;
-    POSIX_GUARD_OSSL(EVP_DecryptUpdate(key->evp_cipher_ctx, out->data, &len, in->data, in->size), S2N_ERR_ENCRYPT);
+    /* len is set by EVP_DecryptUpdate and checked post operation */
+    int len = 0;
+    POSIX_GUARD_OSSL(EVP_DecryptUpdate(key->evp_cipher_ctx, out->data, &len, in->data, in->size), S2N_ERR_DECRYPT);
 
-    S2N_ERROR_IF(len != in->size, S2N_ERR_ENCRYPT);
+    POSIX_ENSURE((int64_t) len == (int64_t) in->size, S2N_ERR_DECRYPT);
 
     return 0;
 }
@@ -123,12 +124,12 @@ static int s2n_stream_cipher_rc4_destroy_key(struct s2n_session_key *key)
 
 #endif /* S2N_LIBCRYPTO_SUPPORTS_EVP_RC4 */
 
-struct s2n_cipher s2n_rc4 = {
+const struct s2n_cipher s2n_rc4 = {
     .type = S2N_STREAM,
     .key_material_size = 16,
     .io.stream = {
-                  .decrypt = s2n_stream_cipher_rc4_decrypt,
-                  .encrypt = s2n_stream_cipher_rc4_encrypt},
+            .decrypt = s2n_stream_cipher_rc4_decrypt,
+            .encrypt = s2n_stream_cipher_rc4_encrypt },
     .is_available = s2n_stream_cipher_rc4_available,
     .init = s2n_stream_cipher_rc4_init,
     .set_decryption_key = s2n_stream_cipher_rc4_set_decryption_key,

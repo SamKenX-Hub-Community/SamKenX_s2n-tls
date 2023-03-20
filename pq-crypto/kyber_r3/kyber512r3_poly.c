@@ -6,6 +6,8 @@
 #include "kyber512r3_cbd.h"
 #include "kyber512r3_symmetric.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
 * Name:        poly_compress
 *

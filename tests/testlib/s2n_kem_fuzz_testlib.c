@@ -13,13 +13,14 @@
  * permissions and limitations under the License.
  */
 
-#include "s2n_testlib.h"
-#include "utils/s2n_safety.h"
-#include "tls/s2n_kem.h"
-#include "tests/testlib/s2n_nist_kats.h"
 #include "pq-crypto/s2n_pq.h"
+#include "s2n_testlib.h"
+#include "tests/testlib/s2n_nist_kats.h"
+#include "tls/s2n_kem.h"
+#include "utils/s2n_safety.h"
 
-int s2n_kem_recv_ciphertext_fuzz_test_init(const char *kat_file_path, struct s2n_kem_params *kem_params) {
+int s2n_kem_recv_ciphertext_fuzz_test_init(const char *kat_file_path, struct s2n_kem_params *kem_params)
+{
     POSIX_ENSURE_REF(kat_file_path);
     POSIX_ENSURE_REF(kem_params);
     POSIX_ENSURE_REF(kem_params->kem);
@@ -33,7 +34,8 @@ int s2n_kem_recv_ciphertext_fuzz_test_init(const char *kat_file_path, struct s2n
     return S2N_SUCCESS;
 }
 
-int s2n_kem_recv_ciphertext_fuzz_test(const uint8_t *buf, size_t len, struct s2n_kem_params *kem_params) {
+int s2n_kem_recv_ciphertext_fuzz_test(const uint8_t *buf, size_t len, struct s2n_kem_params *kem_params)
+{
     POSIX_ENSURE_REF(buf);
     POSIX_ENSURE_REF(kem_params);
     POSIX_ENSURE_REF(kem_params->kem);
@@ -57,14 +59,10 @@ int s2n_kem_recv_ciphertext_fuzz_test(const uint8_t *buf, size_t len, struct s2n
      * be garbage. Therefore, if recv_ciphertext() fails for these KEMs,
      * it should not have been due to S2N_ERR_PQ_CRYPTO.
      *
-     * The one exception is BIKE1L1R1, which does not guarantee this
-     * property. If provided an invalid ciphertext input, BIKE1L1R1
-     * will likely fail (return non-zero) and set S2N_ERR_PQ_CRYPTO.
-     *
      * If PQ is not enabled, then recv_ciphertext() should always fail. */
     int recv_ciphertext_ret = s2n_kem_recv_ciphertext(&ciphertext, kem_params);
 
-    if (s2n_pq_is_enabled() && recv_ciphertext_ret != S2N_SUCCESS && kem_params->kem != &s2n_bike1_l1_r1) {
+    if (s2n_pq_is_enabled() && recv_ciphertext_ret != S2N_SUCCESS) {
         POSIX_ENSURE_NE(s2n_errno, S2N_ERR_PQ_CRYPTO);
     }
 
@@ -78,7 +76,8 @@ int s2n_kem_recv_ciphertext_fuzz_test(const uint8_t *buf, size_t len, struct s2n
     return S2N_SUCCESS;
 }
 
-int s2n_kem_recv_public_key_fuzz_test(const uint8_t *buf, size_t len, struct s2n_kem_params *kem_params) {
+int s2n_kem_recv_public_key_fuzz_test(const uint8_t *buf, size_t len, struct s2n_kem_params *kem_params)
+{
     POSIX_ENSURE_REF(buf);
     POSIX_ENSURE_REF(kem_params);
     POSIX_ENSURE_REF(kem_params->kem);
@@ -92,7 +91,7 @@ int s2n_kem_recv_public_key_fuzz_test(const uint8_t *buf, size_t len, struct s2n
      * we continue by calling s2n_kem_send_ciphertext to attempt to use the key
      * for encryption. */
     if (s2n_kem_recv_public_key(&public_key, kem_params) == S2N_SUCCESS) {
-        DEFER_CLEANUP(struct s2n_stuffer out = {0}, s2n_stuffer_free);
+        DEFER_CLEANUP(struct s2n_stuffer out = { 0 }, s2n_stuffer_free);
         POSIX_GUARD(s2n_stuffer_growable_alloc(&out, 8192));
         int send_ct_ret = s2n_kem_send_ciphertext(&out, kem_params);
 

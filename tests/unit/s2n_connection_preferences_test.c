@@ -13,11 +13,11 @@
  * permissions and limitations under the License.
  */
 
-#include "api/s2n.h"
 #include <stdlib.h>
-#include "s2n_test.h"
 
+#include "api/s2n.h"
 #include "crypto/s2n_fips.h"
+#include "s2n_test.h"
 #include "tls/s2n_config.h"
 #include "tls/s2n_connection.h"
 #include "tls/s2n_security_policies.h"
@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 {
     BEGIN_TEST();
     EXPECT_SUCCESS(s2n_disable_tls13_in_test());
-    
+
     const struct s2n_security_policy *default_security_policy, *tls13_security_policy, *fips_security_policy;
     EXPECT_SUCCESS(s2n_find_security_policy_from_version("default_tls13", &tls13_security_policy));
     EXPECT_SUCCESS(s2n_find_security_policy_from_version("default_fips", &fips_security_policy));
@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
         EXPECT_SUCCESS(s2n_disable_tls13_in_test());
-    }
+    };
 
     /* Test default fips */
 
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
         EXPECT_EQUAL(ecc_preferences, &s2n_ecc_preferences_null);
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test Error Case */
     {
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
         EXPECT_FAILURE_WITH_ERRNO(s2n_connection_get_ecc_preferences(conn, &ecc_preferences), S2N_ERR_INVALID_ECC_PREFERENCES);
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* s2n_connection_get_curve */
     {
@@ -277,20 +277,20 @@ int main(int argc, char **argv)
 
         /* TLS1.2 returns a curve if ECDHE cipher negotiated */
         conn->actual_protocol_version = S2N_TLS12;
-        conn->secure.cipher_suite = &s2n_ecdhe_rsa_with_aes_128_cbc_sha256;
+        conn->secure->cipher_suite = &s2n_ecdhe_rsa_with_aes_128_cbc_sha256;
         conn->kex_params.server_ecc_evp_params.negotiated_curve = &s2n_ecc_curve_secp256r1;
         EXPECT_NOT_NULL(curve_name = s2n_connection_get_curve(conn));
         EXPECT_BYTEARRAY_EQUAL(curve_name, s2n_ecc_curve_secp256r1.name, strlen(s2n_ecc_curve_secp256r1.name));
 
         /* TLS1.2 does not return a curve if ECDHE cipher was not negotiated */
         conn->actual_protocol_version = S2N_TLS12;
-        conn->secure.cipher_suite = &s2n_rsa_with_aes_256_gcm_sha384;
+        conn->secure->cipher_suite = &s2n_rsa_with_aes_256_gcm_sha384;
         conn->kex_params.server_ecc_evp_params.negotiated_curve = &s2n_ecc_curve_secp256r1;
         EXPECT_NOT_NULL(curve_name = s2n_connection_get_curve(conn));
         EXPECT_BYTEARRAY_EQUAL(curve_name, no_curve, strlen(no_curve));
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     END_TEST();
 }

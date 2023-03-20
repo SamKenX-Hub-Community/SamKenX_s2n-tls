@@ -1,15 +1,15 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    raw::{config::*, security},
-    testing::s2n_tls::Harness,
-};
+use crate::{callbacks::VerifyHostNameCallback, config::*, security, testing::s2n_tls::Harness};
 use alloc::{collections::VecDeque, sync::Arc};
 use bytes::Bytes;
-use core::{sync::atomic::Ordering, task::Poll};
-use std::sync::atomic::AtomicUsize;
+use core::{
+    sync::atomic::{AtomicUsize, Ordering},
+    task::Poll,
+};
 
+pub mod client_hello;
 pub mod s2n_tls;
 
 type Error = Box<dyn std::error::Error>;
@@ -19,6 +19,40 @@ type Result<T, E = Error> = core::result::Result<T, E>;
 ///
 /// This is to prevent endless looping without making progress on the connection.
 const SAMPLES: usize = 100;
+
+pub fn test_error(msg: &str) -> crate::error::Error {
+    crate::error::Error::application(msg.into())
+}
+
+pub fn assert_test_error(input: Error, msg: &str) {
+    let error = input
+        .downcast::<crate::error::Error>()
+        .expect("Unexpected generic error type");
+    if let Some(inner) = error.application_error() {
+        assert_eq!(msg, inner.to_string())
+    } else {
+        panic!("Unexpected known error type");
+    }
+}
+
+#[derive(Clone)]
+pub struct Counter(Arc<AtomicUsize>);
+impl Counter {
+    fn new() -> Self {
+        Counter(Arc::new(AtomicUsize::new(0)))
+    }
+    pub fn count(&self) -> usize {
+        self.0.load(Ordering::Relaxed)
+    }
+    pub fn increment(&self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+impl Default for Counter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub trait Connection: core::fmt::Debug {
     fn poll<Ctx: Context>(&mut self, context: &mut Ctx) -> Poll<Result<()>>;
@@ -136,20 +170,18 @@ impl CertKeyPair {
 
 #[derive(Default)]
 pub struct UnsecureAcceptAllClientCertificatesHandler {}
-impl VerifyClientCertificateHandler for UnsecureAcceptAllClientCertificatesHandler {
+impl VerifyHostNameCallback for UnsecureAcceptAllClientCertificatesHandler {
     fn verify_host_name(&self, _host_name: &str) -> bool {
         true
     }
 }
 
-pub fn build_config(cipher_prefs: &security::Policy) -> Result<crate::raw::config::Config, Error> {
+pub fn build_config(cipher_prefs: &security::Policy) -> Result<crate::config::Config, Error> {
     let builder = config_builder(cipher_prefs)?;
     Ok(builder.build().expect("Unable to build server config"))
 }
 
-pub fn config_builder(
-    cipher_prefs: &security::Policy,
-) -> Result<crate::raw::config::Builder, Error> {
+pub fn config_builder(cipher_prefs: &security::Policy) -> Result<crate::config::Builder, Error> {
     let mut builder = Builder::new();
     let mut keypair = CertKeyPair::default();
     // Build a config
@@ -161,7 +193,7 @@ pub fn config_builder(
         .expect("Unable to load cert/pem");
     unsafe {
         builder
-            .set_verify_host_handler(UnsecureAcceptAllClientCertificatesHandler::default())
+            .set_verify_host_callback(UnsecureAcceptAllClientCertificatesHandler::default())
             .expect("Unable to set a host verify callback.");
         builder
             .disable_x509_verification()
@@ -170,26 +202,26 @@ pub fn config_builder(
     Ok(builder)
 }
 
-pub fn s2n_tls_pair(config: crate::raw::config::Config) {
+pub fn s2n_tls_pair(config: crate::config::Config) {
     // create and configure a server connection
-    let mut server = crate::raw::connection::Connection::new_server();
+    let mut server = crate::connection::Connection::new_server();
     server
         .set_config(config.clone())
         .expect("Failed to bind config to server connection");
     let server = Harness::new(server);
 
     // create a client connection
-    let mut client = crate::raw::connection::Connection::new_client();
+    let mut client = crate::connection::Connection::new_client();
     client
         .set_config(config)
-        .expect("Unabel to set client config");
+        .expect("Unable to set client config");
     let client = Harness::new(client);
 
     let pair = Pair::new(server, client, SAMPLES);
     poll_tls_pair(pair);
 }
 
-pub fn poll_tls_pair(mut pair: Pair<Harness, Harness>) {
+pub fn poll_tls_pair(mut pair: Pair<Harness, Harness>) -> Pair<Harness, Harness> {
     loop {
         match pair.poll() {
             Poll::Ready(result) => {
@@ -201,37 +233,15 @@ pub fn poll_tls_pair(mut pair: Pair<Harness, Harness>) {
     }
 
     // TODO add assertions to make sure the handshake actually succeeded
+
+    pair
 }
 
-#[derive(Clone)]
-pub struct MockClientHelloHandler {
-    require_pending_count: usize,
-    invoked: Arc<AtomicUsize>,
-}
-
-impl MockClientHelloHandler {
-    pub fn new(require_pending_count: usize) -> Self {
-        Self {
-            require_pending_count,
-            invoked: Arc::new(AtomicUsize::new(0)),
+pub fn poll_tls_pair_result(mut pair: Pair<Harness, Harness>) -> Result<()> {
+    loop {
+        match pair.poll() {
+            Poll::Ready(result) => return result,
+            Poll::Pending => continue,
         }
-    }
-}
-
-impl ClientHelloHandler for MockClientHelloHandler {
-    fn poll_client_hello(
-        &self,
-        connection: &mut crate::raw::connection::Connection,
-    ) -> core::task::Poll<Result<(), ()>> {
-        if self.invoked.fetch_add(1, Ordering::SeqCst) < self.require_pending_count {
-            // confirm the callback can access the waker
-            connection.waker().unwrap().wake_by_ref();
-            return Poll::Pending;
-        }
-
-        // Test that server_name_extension_used can be invoked
-        connection.server_name_extension_used();
-
-        Poll::Ready(Ok(()))
     }
 }

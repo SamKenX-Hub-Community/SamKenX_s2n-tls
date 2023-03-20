@@ -13,14 +13,14 @@
  * permissions and limitations under the License.
  */
 
-#include "s2n_test.h"
-#include "testlib/s2n_testlib.h"
+#include "tls/s2n_security_policies.h"
 
 #include "crypto/s2n_rsa_signing.h"
-#include "tls/s2n_security_policies.h"
-#include "tls/s2n_signature_algorithms.h"
-#include "tls/s2n_kem.h"
 #include "pq-crypto/s2n_pq.h"
+#include "s2n_test.h"
+#include "testlib/s2n_testlib.h"
+#include "tls/s2n_kem.h"
+#include "tls/s2n_signature_algorithms.h"
 
 int main(int argc, char **argv)
 {
@@ -39,7 +39,7 @@ int main(int argc, char **argv)
             EXPECT_TRUE(security_policy->kem_preferences->tls13_kem_group_count <= S2N_SUPPORTED_KEM_GROUPS_COUNT);
 
             /* Ensure all TLS 1.3 KEM groups in all policies are in the global list of all supported KEM groups */
-            for(size_t i = 0; i < security_policy->kem_preferences->tls13_kem_group_count; i++) {
+            for (size_t i = 0; i < security_policy->kem_preferences->tls13_kem_group_count; i++) {
                 const struct s2n_kem_group *kem_group = security_policy->kem_preferences->tls13_kem_groups[i];
 
                 bool kem_group_is_supported = false;
@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 
         /* TLS 1.3 Cipher suites have TLS 1.3 Signature Algorithms Test */
         bool has_tls_13_cipher = false;
-        for(size_t i = 0; i < security_policy->cipher_preferences->count; i++){
+        for (size_t i = 0; i < security_policy->cipher_preferences->count; i++) {
             if (security_policy->cipher_preferences->suites[i]->minimum_required_tls_version == S2N_TLS13) {
                 has_tls_13_cipher = true;
                 break;
@@ -66,11 +66,13 @@ int main(int argc, char **argv)
             /* Validate that s2n_tls13_default_sig_scheme() is successful on all TLS 1.3 Security Policies for all
              * TLS 1.3 Ciphers */
             {
-                struct s2n_cipher_suite tls_13_ciphers[] = { s2n_tls13_aes_128_gcm_sha256,
-                                                             s2n_tls13_aes_256_gcm_sha384,
-                                                             s2n_tls13_chacha20_poly1305_sha256 };
+                struct s2n_cipher_suite tls_13_ciphers[] = {
+                    s2n_tls13_aes_128_gcm_sha256,
+                    s2n_tls13_aes_256_gcm_sha384,
+                    s2n_tls13_chacha20_poly1305_sha256
+                };
 
-                for (size_t i = 0; i < s2n_array_len(tls_13_ciphers); i ++) {
+                for (size_t i = 0; i < s2n_array_len(tls_13_ciphers); i++) {
                     struct s2n_config *config = s2n_config_new();
                     EXPECT_NOT_NULL(config);
 
@@ -101,10 +103,10 @@ int main(int argc, char **argv)
 
                     client_conn->actual_protocol_version = S2N_TLS13;
                     server_conn->actual_protocol_version = S2N_TLS13;
-                    client_conn->secure.cipher_suite = &tls_13_ciphers[i];
-                    server_conn->secure.cipher_suite = &tls_13_ciphers[i];
+                    client_conn->secure->cipher_suite = &tls_13_ciphers[i];
+                    server_conn->secure->cipher_suite = &tls_13_ciphers[i];
 
-                    struct s2n_signature_scheme chosen_scheme = {0};
+                    struct s2n_signature_scheme chosen_scheme = { 0 };
 
                     if (s2n_is_rsa_pss_signing_supported()) {
                         /* If RSA PSS signing is supported, then we should always be able to select a default Signature
@@ -127,11 +129,13 @@ int main(int argc, char **argv)
 
             /* Same as above test, but with ECDSA Certificates */
             {
-                struct s2n_cipher_suite tls_13_ciphers[] = { s2n_tls13_aes_128_gcm_sha256,
-                                                             s2n_tls13_aes_256_gcm_sha384,
-                                                             s2n_tls13_chacha20_poly1305_sha256 };
+                struct s2n_cipher_suite tls_13_ciphers[] = {
+                    s2n_tls13_aes_128_gcm_sha256,
+                    s2n_tls13_aes_256_gcm_sha384,
+                    s2n_tls13_chacha20_poly1305_sha256
+                };
 
-                for (size_t i = 0; i < s2n_array_len(tls_13_ciphers); i ++) {
+                for (size_t i = 0; i < s2n_array_len(tls_13_ciphers); i++) {
                     struct s2n_config *config = s2n_config_new();
                     EXPECT_NOT_NULL(config);
 
@@ -162,10 +166,10 @@ int main(int argc, char **argv)
 
                     client_conn->actual_protocol_version = S2N_TLS13;
                     server_conn->actual_protocol_version = S2N_TLS13;
-                    client_conn->secure.cipher_suite = &tls_13_ciphers[i];
-                    server_conn->secure.cipher_suite = &tls_13_ciphers[i];
+                    client_conn->secure->cipher_suite = &tls_13_ciphers[i];
+                    server_conn->secure->cipher_suite = &tls_13_ciphers[i];
 
-                    struct s2n_signature_scheme chosen_scheme = {0};
+                    struct s2n_signature_scheme chosen_scheme = { 0 };
 
                     /* If an ECDSA Certificate is configured, then we should always be able to pick a default Signature
                      * Scheme (even if RSA PSS is not supported by the libcrypto) */
@@ -182,7 +186,7 @@ int main(int argc, char **argv)
             bool has_tls_13_sig_alg = false;
             bool has_rsa_pss = false;
 
-            for(size_t i = 0; i < security_policy->signature_preferences->count; i++) {
+            for (size_t i = 0; i < security_policy->signature_preferences->count; i++) {
                 int min = security_policy->signature_preferences->signature_schemes[i]->minimum_protocol_version;
                 int max = security_policy->signature_preferences->signature_schemes[i]->maximum_protocol_version;
                 s2n_signature_algorithm sig_alg = security_policy->signature_preferences->signature_schemes[i]->sig_alg;
@@ -228,11 +232,15 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("test_all", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(5, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r2r1_2020_07);
-        EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
+#if EVP_APIS_SUPPORTED
+        EXPECT_EQUAL(2, security_policy->kem_preferences->tls13_kem_group_count);
+#else
+        EXPECT_EQUAL(1, security_policy->kem_preferences->tls13_kem_group_count);
+#endif
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("KMS-TLS-1-0-2018-10", &security_policy));
@@ -246,40 +254,37 @@ int main(int argc, char **argv)
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("KMS-PQ-TLS-1-0-2019-06", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
-        EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(2, security_policy->kem_preferences->kem_count);
-        EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r1);
+        EXPECT_FALSE(s2n_pq_kem_is_extension_required(security_policy));
+        EXPECT_EQUAL(0, security_policy->kem_preferences->kem_count);
+        EXPECT_NULL(security_policy->kem_preferences->kems);
+        EXPECT_NULL(security_policy->kem_preferences->kems);
         EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
         EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-SIKE-TEST-TLS-1-0-2019-11", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
-        EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
-        EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_sike_r1);
+        EXPECT_FALSE(s2n_pq_kem_is_extension_required(security_policy));
+        EXPECT_EQUAL(0, security_policy->kem_preferences->kem_count);
+        EXPECT_NULL(security_policy->kem_preferences->kems);
         EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
         EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-SIKE-TEST-TLS-1-0-2020-02", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
-        EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(2, security_policy->kem_preferences->kem_count);
-        EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_sike_r2r1);
+        EXPECT_FALSE(s2n_pq_kem_is_extension_required(security_policy));
+        EXPECT_EQUAL(0, security_policy->kem_preferences->kem_count);
+        EXPECT_NULL(security_policy->kem_preferences->kems);
         EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
         EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("KMS-PQ-TLS-1-0-2020-02", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
-        EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(4, security_policy->kem_preferences->kem_count);
-        EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r2r1);
+        EXPECT_FALSE(s2n_pq_kem_is_extension_required(security_policy));
+        EXPECT_EQUAL(0, security_policy->kem_preferences->kem_count);
+        EXPECT_NULL(security_policy->kem_preferences->kems);
         EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
         EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
 
@@ -287,135 +292,140 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("KMS-PQ-TLS-1-0-2020-07", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(5, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r2r1_2020_07);
-        EXPECT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(0, security_policy->kem_preferences->tls13_kem_group_count);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
+        EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
+#if EVP_APIS_SUPPORTED
+        EXPECT_EQUAL(2, security_policy->kem_preferences->tls13_kem_group_count);
+#else
+        EXPECT_EQUAL(1, security_policy->kem_preferences->tls13_kem_group_count);
+#endif
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2020-12", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(5, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r2r1_2020_07);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
 #if EVP_APIS_SUPPORTED
-        EXPECT_EQUAL(6, security_policy->kem_preferences->tls13_kem_group_count);
+        EXPECT_EQUAL(2, security_policy->kem_preferences->tls13_kem_group_count);
 #else
-        EXPECT_EQUAL(3, security_policy->kem_preferences->tls13_kem_group_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->tls13_kem_group_count);
 #endif
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-1-2021-05-17", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-18", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-19", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-20", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-1-2021-05-21", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20200207);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-22", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20200207);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-23", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20200207);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-24", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20200207);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-25", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
 
         security_policy = NULL;
         EXPECT_SUCCESS(s2n_find_security_policy_from_version("PQ-TLS-1-0-2021-05-26", &security_policy));
         EXPECT_TRUE(s2n_ecc_is_extension_required(security_policy));
         EXPECT_TRUE(s2n_pq_kem_is_extension_required(security_policy));
-        EXPECT_EQUAL(7, security_policy->kem_preferences->kem_count);
+        EXPECT_EQUAL(1, security_policy->kem_preferences->kem_count);
         EXPECT_NOT_NULL(security_policy->kem_preferences->kems);
-        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3r2r1_2021_05);
+        EXPECT_EQUAL(security_policy->kem_preferences->kems, pq_kems_r3_2021_05);
         EXPECT_NOT_NULL(security_policy->kem_preferences->tls13_kem_groups);
-        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3r2);
+        EXPECT_EQUAL(security_policy->kem_preferences->tls13_kem_groups, pq_kem_groups_r3);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20200207);
 
         security_policy = NULL;
@@ -509,9 +519,11 @@ int main(int argc, char **argv)
             "CloudFront-TLS-1-0-2014",
             "CloudFront-TLS-1-0-2016",
             "CloudFront-TLS-1-1-2016",
+            "CloudFront-TLS-1-2-2017",
             "CloudFront-TLS-1-2-2018",
             "CloudFront-TLS-1-2-2019",
             "CloudFront-TLS-1-2-2021",
+            "CloudFront-TLS-1-2-2021-ChaCha20-Boosted",
             /* AWS Common Runtime SDK */
             "AWS-CRT-SDK-SSLv3.0",
             "AWS-CRT-SDK-TLSv1.0",
@@ -534,10 +546,41 @@ int main(int argc, char **argv)
         EXPECT_FALSE(s2n_security_policy_supports_tls13(security_policy));
     }
 
+    /* Test that security policies have valid chacha20 boosting configurations when chacha20 is available */
+    if (s2n_chacha20_poly1305.is_available()) {
+        for (size_t i = 0; security_policy_selection[i].version != NULL; i++) {
+            const struct s2n_security_policy *sec_policy = security_policy_selection[i].security_policy;
+            EXPECT_NOT_NULL(sec_policy);
+            const struct s2n_cipher_preferences *cipher_preference = sec_policy->cipher_preferences;
+            EXPECT_NOT_NULL(cipher_preference);
+
+            /* No need to check cipher preferences with chacha20 boosting disabled */
+            if (!cipher_preference->allow_chacha20_boosting) {
+                continue;
+            }
+
+            bool cipher_preferences_has_chacha20_cipher_suite = false;
+
+            /* Iterate over cipher preferences and try to find a chacha20 ciphersuite */
+            for (size_t j = 0; j < cipher_preference->count; j++) {
+                struct s2n_cipher_suite *cipher = cipher_preference->suites[j];
+                EXPECT_NOT_NULL(cipher);
+
+                if (s2n_cipher_suite_uses_chacha20_alg(cipher)) {
+                    cipher_preferences_has_chacha20_cipher_suite = true;
+                    break;
+                }
+            }
+
+            /* If chacha20 boosting support is enabled, then the cipher preference must have at least one chacha20 cipher suite */
+            EXPECT_TRUE(cipher_preferences_has_chacha20_cipher_suite);
+        }
+    }
+
     /* Test a security policy not on the official list */
     {
         struct s2n_cipher_suite *fake_suites[] = {
-            &s2n_ecdhe_bike_rsa_with_aes_256_gcm_sha384,
+            &s2n_ecdhe_kyber_rsa_with_aes_256_gcm_sha384,
             &s2n_tls13_chacha20_poly1305_sha256,
         };
 
@@ -604,35 +647,35 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "test_all"));
         EXPECT_EQUAL(config->security_policy, &security_policy_test_all);
         EXPECT_EQUAL(config->security_policy->cipher_preferences, &cipher_preferences_test_all);
-        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(config->security_policy->signature_preferences, &s2n_signature_preferences_20201021);
         EXPECT_EQUAL(config->security_policy->ecc_preferences, &s2n_ecc_preferences_test_all);
 
         EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "test_all_tls12"));
         EXPECT_EQUAL(config->security_policy, &security_policy_test_all_tls12);
         EXPECT_EQUAL(config->security_policy->cipher_preferences, &cipher_preferences_test_all_tls12);
-        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(config->security_policy->signature_preferences, &s2n_signature_preferences_20201021);
         EXPECT_EQUAL(config->security_policy->ecc_preferences, &s2n_ecc_preferences_20201021);
 
         EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "KMS-PQ-TLS-1-0-2020-07"));
         EXPECT_EQUAL(config->security_policy, &security_policy_kms_pq_tls_1_0_2020_07);
         EXPECT_EQUAL(config->security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2020_07);
-        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(config->security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(config->security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
         EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "KMS-PQ-TLS-1-0-2020-02"));
         EXPECT_EQUAL(config->security_policy, &security_policy_kms_pq_tls_1_0_2020_02);
         EXPECT_EQUAL(config->security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2020_02);
-        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_02);
+        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_null);
         EXPECT_EQUAL(config->security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(config->security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
         EXPECT_SUCCESS(s2n_config_set_cipher_preferences(config, "KMS-PQ-TLS-1-0-2019-06"));
         EXPECT_EQUAL(config->security_policy, &security_policy_kms_pq_tls_1_0_2019_06);
         EXPECT_EQUAL(config->security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2019_06);
-        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2019_06);
+        EXPECT_EQUAL(config->security_policy->kem_preferences, &kem_preferences_null);
         EXPECT_EQUAL(config->security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(config->security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
@@ -725,7 +768,7 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_get_security_policy(conn, &security_policy));
         EXPECT_EQUAL(security_policy, &security_policy_test_all);
         EXPECT_EQUAL(security_policy->cipher_preferences, &cipher_preferences_test_all);
-        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20201021);
         EXPECT_EQUAL(security_policy->ecc_preferences, &s2n_ecc_preferences_test_all);
 
@@ -733,7 +776,7 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_get_security_policy(conn, &security_policy));
         EXPECT_EQUAL(security_policy, &security_policy_test_all_tls12);
         EXPECT_EQUAL(security_policy->cipher_preferences, &cipher_preferences_test_all_tls12);
-        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20201021);
         EXPECT_EQUAL(security_policy->ecc_preferences, &s2n_ecc_preferences_20201021);
 
@@ -741,7 +784,7 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_get_security_policy(conn, &security_policy));
         EXPECT_EQUAL(security_policy, &security_policy_kms_pq_tls_1_0_2020_07);
         EXPECT_EQUAL(security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2020_07);
-        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_07);
+        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_pq_tls_1_0_2021_05);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
@@ -749,7 +792,7 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_get_security_policy(conn, &security_policy));
         EXPECT_EQUAL(security_policy, &security_policy_kms_pq_tls_1_0_2020_02);
         EXPECT_EQUAL(security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2020_02);
-        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2020_02);
+        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_null);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
@@ -757,7 +800,7 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_connection_get_security_policy(conn, &security_policy));
         EXPECT_EQUAL(security_policy, &security_policy_kms_pq_tls_1_0_2019_06);
         EXPECT_EQUAL(security_policy->cipher_preferences, &cipher_preferences_kms_pq_tls_1_0_2019_06);
-        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_kms_pq_tls_1_0_2019_06);
+        EXPECT_EQUAL(security_policy->kem_preferences, &kem_preferences_null);
         EXPECT_EQUAL(security_policy->signature_preferences, &s2n_signature_preferences_20140601);
         EXPECT_EQUAL(security_policy->ecc_preferences, &s2n_ecc_preferences_20140601);
 
@@ -806,9 +849,9 @@ int main(int argc, char **argv)
     /* Failure case when s2n_ecc_preference lists contains a curve not present in s2n_all_supported_curves_list */
     {
         const struct s2n_ecc_named_curve test_curve = {
-            .iana_id = 12345, 
-            .libcrypto_nid = 0, 
-            .name = "test_curve", 
+            .iana_id = 12345,
+            .libcrypto_nid = 0,
+            .name = "test_curve",
             .share_size = 0
         };
 
@@ -831,33 +874,33 @@ int main(int argc, char **argv)
         EXPECT_SUCCESS(s2n_validate_kem_preferences(&kem_preferences_null, 0));
 
         const struct s2n_kem_group *test_kem_group_list[] = {
-                &s2n_secp256r1_sike_p434_r3
+            &s2n_secp256r1_kyber_512_r3
         };
 
         const struct s2n_kem_preferences invalid_kem_prefs[] = {
             {
-                .kem_count = 1,
-                .kems = NULL,
-                .tls13_kem_group_count = 0,
-                .tls13_kem_groups = NULL,
+                    .kem_count = 1,
+                    .kems = NULL,
+                    .tls13_kem_group_count = 0,
+                    .tls13_kem_groups = NULL,
             },
             {
-                .kem_count = 0,
-                .kems = NULL,
-                .tls13_kem_group_count = 1,
-                .tls13_kem_groups = NULL,
+                    .kem_count = 0,
+                    .kems = NULL,
+                    .tls13_kem_group_count = 1,
+                    .tls13_kem_groups = NULL,
             },
             {
-                .kem_count = 0,
-                .kems = pq_kems_r1,
-                .tls13_kem_group_count = 0,
-                .tls13_kem_groups = NULL,
+                    .kem_count = 0,
+                    .kems = pq_kems_r3_2021_05,
+                    .tls13_kem_group_count = 0,
+                    .tls13_kem_groups = NULL,
             },
             {
-                .kem_count = 0,
-                .kems = NULL,
-                .tls13_kem_group_count = 0,
-                .tls13_kem_groups = test_kem_group_list,
+                    .kem_count = 0,
+                    .kems = NULL,
+                    .tls13_kem_group_count = 0,
+                    .tls13_kem_groups = test_kem_group_list,
             },
         };
 
@@ -865,8 +908,8 @@ int main(int argc, char **argv)
             EXPECT_FAILURE_WITH_ERRNO(s2n_validate_kem_preferences(&invalid_kem_prefs[i], 1), S2N_ERR_INVALID_SECURITY_POLICY);
         }
 
-        EXPECT_FAILURE_WITH_ERRNO(s2n_validate_kem_preferences(&kem_preferences_kms_pq_tls_1_0_2020_07, 0), S2N_ERR_INVALID_SECURITY_POLICY);
-        EXPECT_SUCCESS(s2n_validate_kem_preferences(&kem_preferences_kms_pq_tls_1_0_2020_07, 1));
+        EXPECT_FAILURE_WITH_ERRNO(s2n_validate_kem_preferences(&kem_preferences_pq_tls_1_0_2021_05, 0), S2N_ERR_INVALID_SECURITY_POLICY);
+        EXPECT_SUCCESS(s2n_validate_kem_preferences(&kem_preferences_pq_tls_1_0_2021_05, 1));
     }
 
     /* Checks that NUM_RSA_PSS_SCHEMES accurately represents the number of rsa_pss signature schemes usable in a
@@ -880,7 +923,7 @@ int main(int argc, char **argv)
                 size_t num_rsa_pss = 0;
                 for (size_t j = 0; j < security_policy->certificate_signature_preferences->count; j++) {
                     if (security_policy->certificate_signature_preferences->signature_schemes[j]->libcrypto_nid == NID_rsassaPss) {
-                        num_rsa_pss +=1;
+                        num_rsa_pss += 1;
                     }
                 }
                 EXPECT_TRUE(num_rsa_pss <= NUM_RSA_PSS_SCHEMES);
@@ -890,7 +933,7 @@ int main(int argc, char **argv)
 
     /* s2n_validate_certificate_signature_preferences will succeed if there are no rsa_pss schemes in the preference list */
     {
-        const struct s2n_signature_scheme* const test_sig_scheme_pref_list[] = {
+        const struct s2n_signature_scheme *const test_sig_scheme_pref_list[] = {
             &s2n_rsa_pkcs1_sha256,
         };
 
@@ -904,7 +947,7 @@ int main(int argc, char **argv)
 
     /* s2n_validate_certificate_signature_preferences will succeed if all rsa_pss schemes are included in the preference list */
     {
-        const struct s2n_signature_scheme* const test_sig_scheme_pref_list[] = {
+        const struct s2n_signature_scheme *const test_sig_scheme_pref_list[] = {
             &s2n_rsa_pss_pss_sha256,
             &s2n_rsa_pss_pss_sha384,
             &s2n_rsa_pss_pss_sha512,
@@ -923,7 +966,7 @@ int main(int argc, char **argv)
 
     /* s2n_validate_certificate_signature_preferences will fail if not all rsa_pss schemes are included in the preference list */
     {
-        const struct s2n_signature_scheme* const test_sig_scheme_pref_list[] = {
+        const struct s2n_signature_scheme *const test_sig_scheme_pref_list[] = {
             &s2n_rsa_pss_pss_sha256,
             &s2n_rsa_pss_pss_sha384,
         };

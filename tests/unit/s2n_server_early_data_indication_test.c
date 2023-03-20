@@ -15,11 +15,10 @@
 
 #include "s2n_test.h"
 #include "testlib/s2n_testlib.h"
-#include "utils/s2n_array.h"
-
 #include "tls/extensions/s2n_early_data_indication.h"
 #include "tls/s2n_tls.h"
 #include "tls/s2n_tls13.h"
+#include "utils/s2n_array.h"
 
 static S2N_RESULT s2n_exchange_hellos(struct s2n_connection *client_conn, struct s2n_connection *server_conn)
 {
@@ -64,7 +63,7 @@ int main(int argc, char **argv)
         EXPECT_TRUE(s2n_server_early_data_indication_extension.should_send(conn));
 
         EXPECT_SUCCESS(s2n_connection_free(conn));
-    }
+    };
 
     /* Test s2n_server_early_data_indication_is_missing */
     {
@@ -82,8 +81,8 @@ int main(int argc, char **argv)
             EXPECT_EQUAL(conn->early_data_state, S2N_EARLY_DATA_REJECTED);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
-    }
+        };
+    };
 
     /* Test s2n_server_early_data_indication_recv */
     {
@@ -94,7 +93,7 @@ int main(int argc, char **argv)
             struct s2n_connection *conn = s2n_connection_new(S2N_SERVER);
             EXPECT_NOT_NULL(conn);
 
-            conn->secure.cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
+            conn->secure->cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
             conn->actual_protocol_version = S2N_TLS13;
             conn->early_data_state = S2N_EARLY_DATA_REQUESTED;
 
@@ -109,14 +108,14 @@ int main(int argc, char **argv)
             EXPECT_EQUAL(conn->early_data_state, S2N_EARLY_DATA_ACCEPTED);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
+        };
 
         /* Fails if early data not requested */
         {
             struct s2n_connection *conn = s2n_connection_new(S2N_SERVER);
             EXPECT_NOT_NULL(conn);
 
-            conn->secure.cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
+            conn->secure->cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
             conn->actual_protocol_version = S2N_TLS13;
             EXPECT_OK(s2n_append_test_chosen_psk_with_early_data(conn, nonzero_max_early_data, &s2n_tls13_aes_256_gcm_sha384));
 
@@ -131,12 +130,12 @@ int main(int argc, char **argv)
             EXPECT_EQUAL(conn->early_data_state, S2N_EARLY_DATA_ACCEPTED);
 
             EXPECT_SUCCESS(s2n_connection_free(conn));
-        }
-    }
+        };
+    };
 
     /* Test state transitions */
     {
-        const char* security_policy = "20190801";
+        const char *security_policy = "20190801";
         struct s2n_cipher_suite *expected_cipher_suite = &s2n_tls13_aes_256_gcm_sha384;
 
         /* When early data not requested */
@@ -166,7 +165,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /** When early data accepted.
          *
@@ -206,7 +205,7 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
         /** When early data rejected.
          *
@@ -242,9 +241,9 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
+        };
 
-       /*
+        /*
         *= https://tools.ietf.org/rfc/rfc8446#section-4.2.10
         *= type=test
         *# A server which receives an "early_data" extension MUST behave in one
@@ -281,6 +280,9 @@ int main(int argc, char **argv)
             server_conn->handshake.message_number = 2;
             client_conn->handshake.message_number = 2;
 
+            /* Update the selected_group to ensure the HRR is valid */
+            client_conn->kex_params.client_ecc_evp_params.negotiated_curve = &s2n_ecc_curve_secp521r1;
+
             EXPECT_SUCCESS(s2n_server_hello_retry_send(server_conn));
             EXPECT_SUCCESS(s2n_stuffer_copy(&server_conn->handshake.io, &client_conn->handshake.io,
                     s2n_stuffer_data_available(&server_conn->handshake.io)));
@@ -297,8 +299,8 @@ int main(int argc, char **argv)
 
             EXPECT_SUCCESS(s2n_connection_free(client_conn));
             EXPECT_SUCCESS(s2n_connection_free(server_conn));
-        }
-    }
+        };
+    };
 
     END_TEST();
     return 0;

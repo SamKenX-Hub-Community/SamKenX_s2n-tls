@@ -13,10 +13,11 @@
  * permissions and limitations under the License.
  */
 
-#include "s2n_test.h"
-
 #include <stdint.h>
 
+#include "s2n_test.h"
+
+/* clang-format off */
 #include "tls/s2n_config.h"
 #include "tls/s2n_connection.h"
 #include "tls/s2n_tls13.h"
@@ -28,48 +29,34 @@
 #include "stuffer/s2n_stuffer.h"
 #include "utils/s2n_safety.h"
 #include "pq-crypto/s2n_pq.h"
+/* clang-format on */
 
 #define HELLO_RETRY_MSG_NO 1
-#define MEM_FOR_EXTENSION 4096
+#define MEM_FOR_EXTENSION  4096
 
 static int s2n_generate_pq_hybrid_key_share_for_test(struct s2n_stuffer *out, struct s2n_kem_group_params *kem_group_params);
-static int s2n_copy_pq_share(struct s2n_stuffer *from, struct s2n_blob *to, const struct s2n_kem_group *kem_group);
+static int s2n_copy_pq_share(struct s2n_stuffer *from, struct s2n_blob *to, const struct s2n_kem_group *kem_group, bool len_prefixed);
 
-int main() {
+int main()
+{
     BEGIN_TEST();
     /* PQ hybrid tests for s2n_client_key_share_extension */
-    {
+    for (int len_prefixed = 0; len_prefixed < 2; len_prefixed++) {
+        int draft_revision = (len_prefixed) ? 0 : 5;
         const struct s2n_kem_preferences kem_prefs_all = {
-                .kem_count = 0,
-                .kems = NULL,
-                .tls13_kem_group_count = S2N_SUPPORTED_KEM_GROUPS_COUNT,
-                .tls13_kem_groups = ALL_SUPPORTED_KEM_GROUPS,
+            .kem_count = 0,
+            .kems = NULL,
+            .tls13_kem_group_count = S2N_SUPPORTED_KEM_GROUPS_COUNT,
+            .tls13_kem_groups = ALL_SUPPORTED_KEM_GROUPS,
+            .tls13_pq_hybrid_draft_revision = draft_revision
         };
 
         const struct s2n_security_policy security_policy_all = {
-                .minimum_protocol_version = S2N_SSLv3,
-                .cipher_preferences = &cipher_preferences_test_all_tls13,
-                .kem_preferences = &kem_prefs_all,
-                .signature_preferences = &s2n_signature_preferences_20200207,
-                .ecc_preferences = &s2n_ecc_preferences_20200310,
-        };
-
-        const struct s2n_kem_group *kem_groups_sike[] = {
-                &s2n_secp256r1_sike_p434_r3,
-        };
-        const struct s2n_kem_preferences kem_prefs_sike = {
-                .kem_count = 0,
-                .kems = NULL,
-                .tls13_kem_group_count = s2n_array_len(kem_groups_sike),
-                .tls13_kem_groups = kem_groups_sike,
-        };
-
-        const struct s2n_security_policy security_policy_sike = {
-                .minimum_protocol_version = S2N_SSLv3,
-                .cipher_preferences = &cipher_preferences_test_all_tls13,
-                .kem_preferences = &kem_prefs_sike,
-                .signature_preferences = &s2n_signature_preferences_20200207,
-                .ecc_preferences = &s2n_ecc_preferences_20200310,
+            .minimum_protocol_version = S2N_SSLv3,
+            .cipher_preferences = &cipher_preferences_test_all_tls13,
+            .kem_preferences = &kem_prefs_all,
+            .signature_preferences = &s2n_signature_preferences_20200207,
+            .ecc_preferences = &s2n_ecc_preferences_20200310,
         };
 
         /* Tests for s2n_client_key_share_extension.send */
@@ -90,7 +77,7 @@ int main() {
                 EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(conn, &ecc_preferences));
                 EXPECT_NOT_NULL(ecc_preferences);
 
-                DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
+                DEFER_CLEANUP(struct s2n_stuffer key_share_extension = { 0 }, s2n_stuffer_free);
                 EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 1024));
                 EXPECT_SUCCESS(s2n_client_key_share_extension.send(conn, &key_share_extension));
 
@@ -124,22 +111,24 @@ int main() {
                      * correctly. */
                     const struct s2n_kem_group *test_kem_groups[S2N_SUPPORTED_KEM_GROUPS_COUNT];
                     for (size_t j = 0; j < S2N_SUPPORTED_KEM_GROUPS_COUNT; j++) {
+                        /* cppcheck-suppress moduloofone */
                         test_kem_groups[j] = ALL_SUPPORTED_KEM_GROUPS[(j + i) % S2N_SUPPORTED_KEM_GROUPS_COUNT];
                     }
 
                     const struct s2n_kem_preferences test_kem_prefs = {
-                            .kem_count = 0,
-                            .kems = NULL,
-                            .tls13_kem_group_count = s2n_array_len(test_kem_groups),
-                            .tls13_kem_groups = test_kem_groups,
+                        .kem_count = 0,
+                        .kems = NULL,
+                        .tls13_kem_group_count = s2n_array_len(test_kem_groups),
+                        .tls13_kem_groups = test_kem_groups,
+                        .tls13_pq_hybrid_draft_revision = draft_revision
                     };
 
                     const struct s2n_security_policy test_security_policy = {
-                            .minimum_protocol_version = S2N_SSLv3,
-                            .cipher_preferences = &cipher_preferences_test_all_tls13,
-                            .kem_preferences = &test_kem_prefs,
-                            .signature_preferences = &s2n_signature_preferences_20200207,
-                            .ecc_preferences = &s2n_ecc_preferences_20200310,
+                        .minimum_protocol_version = S2N_SSLv3,
+                        .cipher_preferences = &cipher_preferences_test_all_tls13,
+                        .kem_preferences = &test_kem_prefs,
+                        .signature_preferences = &s2n_signature_preferences_20200207,
+                        .ecc_preferences = &s2n_ecc_preferences_20200310,
                     };
 
                     /* Test sending of default hybrid key share (non-HRR) */
@@ -159,7 +148,7 @@ int main() {
                         EXPECT_EQUAL(test_kem_groups[0], kem_pref->tls13_kem_groups[0]);
                         const struct s2n_kem_group *test_kem_group = kem_pref->tls13_kem_groups[0];
 
-                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
+                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = { 0 }, s2n_stuffer_free);
                         EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, MEM_FOR_EXTENSION));
                         EXPECT_SUCCESS(s2n_client_key_share_extension.send(conn, &key_share_extension));
 
@@ -169,7 +158,7 @@ int main() {
                         EXPECT_EQUAL(kem_group_params->kem_group, test_kem_group);
                         EXPECT_EQUAL(kem_group_params->kem_params.kem, test_kem_group->kem);
                         EXPECT_NOT_NULL(kem_group_params->kem_params.private_key.data);
-                        EXPECT_EQUAL(kem_group_params->kem_params.private_key.size,test_kem_group->kem->private_key_length);
+                        EXPECT_EQUAL(kem_group_params->kem_params.private_key.size, test_kem_group->kem->private_key_length);
                         EXPECT_EQUAL(kem_group_params->ecc_params.negotiated_curve, test_kem_group->curve);
                         EXPECT_NOT_NULL(kem_group_params->ecc_params.evp_pkey);
 
@@ -189,24 +178,34 @@ int main() {
                         EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &sent_hybrid_iana_id));
                         EXPECT_EQUAL(sent_hybrid_iana_id, kem_pref->tls13_kem_groups[0]->iana_id);
 
-                        uint16_t expected_hybrid_share_size =
-                                S2N_SIZE_OF_KEY_SHARE_SIZE
-                                + test_kem_group->curve->share_size
-                                + S2N_SIZE_OF_KEY_SHARE_SIZE
-                                + test_kem_group->kem->public_key_length;
-                        uint16_t sent_hybrid_share_size;
+                        uint16_t expected_hybrid_share_size = 0;
+
+                        if (len_prefixed) {
+                            expected_hybrid_share_size = S2N_SIZE_OF_KEY_SHARE_SIZE
+                                    + test_kem_group->curve->share_size
+                                    + S2N_SIZE_OF_KEY_SHARE_SIZE
+                                    + test_kem_group->kem->public_key_length;
+                        } else {
+                            expected_hybrid_share_size = test_kem_group->curve->share_size + test_kem_group->kem->public_key_length;
+                        }
+
+                        uint16_t sent_hybrid_share_size = 0;
                         EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &sent_hybrid_share_size));
                         EXPECT_EQUAL(sent_hybrid_share_size, expected_hybrid_share_size);
 
-                        uint16_t hybrid_ecc_share_size;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_ecc_share_size));
-                        EXPECT_EQUAL(hybrid_ecc_share_size, test_kem_group->curve->share_size);
-                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, hybrid_ecc_share_size));
+                        if (len_prefixed) {
+                            uint16_t hybrid_ecc_share_size = 0;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_ecc_share_size));
+                            EXPECT_EQUAL(hybrid_ecc_share_size, test_kem_group->curve->share_size);
+                        }
+                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, test_kem_group->curve->share_size));
 
-                        uint16_t hybrid_pq_share_size;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_pq_share_size));
-                        EXPECT_EQUAL(hybrid_pq_share_size, test_kem_group->kem->public_key_length);
-                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, hybrid_pq_share_size));
+                        if (len_prefixed) {
+                            uint16_t hybrid_pq_share_size = 0;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_pq_share_size));
+                            EXPECT_EQUAL(hybrid_pq_share_size, test_kem_group->kem->public_key_length);
+                        }
+                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, test_kem_group->kem->public_key_length));
 
                         /* Assert that the ECC key share is correct: IANA ID || size || share */
                         uint16_t ecc_iana_value, ecc_share_size;
@@ -223,7 +222,8 @@ int main() {
                     }
 
                     /* Test sending key share in response to HRR */
-                    {
+                    /* Need at least two KEM's to test ClientHelloRetry fallback */
+                    if (test_security_policy.kem_preferences->tls13_kem_group_count >= 2) {
                         struct s2n_connection *conn;
                         EXPECT_NOT_NULL(conn = s2n_connection_new(S2N_CLIENT));
                         conn->security_policy_override = &test_security_policy;
@@ -238,7 +238,7 @@ int main() {
                         EXPECT_NOT_NULL(kem_pref);
 
                         /* This is for pre-HRR set up: force the client to generate its default hybrid key share. */
-                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
+                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = { 0 }, s2n_stuffer_free);
                         EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, MEM_FOR_EXTENSION));
                         EXPECT_SUCCESS(s2n_client_key_share_extension.send(conn, &key_share_extension));
                         EXPECT_SUCCESS(s2n_stuffer_wipe(&key_share_extension));
@@ -263,7 +263,7 @@ int main() {
                         EXPECT_EQUAL(kem_group_params->kem_group, negotiated_kem_group);
                         EXPECT_EQUAL(kem_group_params->kem_params.kem, negotiated_kem_group->kem);
                         EXPECT_NOT_NULL(kem_group_params->kem_params.private_key.data);
-                        EXPECT_EQUAL(kem_group_params->kem_params.private_key.size,negotiated_kem_group->kem->private_key_length);
+                        EXPECT_EQUAL(kem_group_params->kem_params.private_key.size, negotiated_kem_group->kem->private_key_length);
                         EXPECT_EQUAL(kem_group_params->ecc_params.negotiated_curve, negotiated_kem_group->curve);
                         EXPECT_NOT_NULL(kem_group_params->ecc_params.evp_pkey);
 
@@ -279,24 +279,34 @@ int main() {
                         EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &sent_hybrid_iana_id));
                         EXPECT_EQUAL(sent_hybrid_iana_id, kem_pref->tls13_kem_groups[chosen_index]->iana_id);
 
-                        uint16_t expected_hybrid_share_size =
-                                S2N_SIZE_OF_KEY_SHARE_SIZE
-                                + negotiated_kem_group->curve->share_size
-                                + S2N_SIZE_OF_KEY_SHARE_SIZE
-                                + negotiated_kem_group->kem->public_key_length;
+                        uint16_t expected_hybrid_share_size;
+
+                        if (len_prefixed) {
+                            expected_hybrid_share_size = S2N_SIZE_OF_KEY_SHARE_SIZE
+                                    + negotiated_kem_group->curve->share_size
+                                    + S2N_SIZE_OF_KEY_SHARE_SIZE
+                                    + negotiated_kem_group->kem->public_key_length;
+                        } else {
+                            expected_hybrid_share_size = negotiated_kem_group->curve->share_size + negotiated_kem_group->kem->public_key_length;
+                        }
+
                         uint16_t sent_hybrid_share_size;
                         EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &sent_hybrid_share_size));
                         EXPECT_EQUAL(sent_hybrid_share_size, expected_hybrid_share_size);
 
-                        uint16_t hybrid_ecc_share_size;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_ecc_share_size));
-                        EXPECT_EQUAL(hybrid_ecc_share_size, negotiated_kem_group->curve->share_size);
-                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, hybrid_ecc_share_size));
+                        if (len_prefixed) {
+                            uint16_t hybrid_ecc_share_size;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_ecc_share_size));
+                            EXPECT_EQUAL(hybrid_ecc_share_size, negotiated_kem_group->curve->share_size);
+                        }
+                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, negotiated_kem_group->curve->share_size));
 
-                        uint16_t hybrid_pq_share_size;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_pq_share_size));
-                        EXPECT_EQUAL(hybrid_pq_share_size, negotiated_kem_group->kem->public_key_length);
-                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, hybrid_pq_share_size));
+                        if (len_prefixed) {
+                            uint16_t hybrid_pq_share_size;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&key_share_extension, &hybrid_pq_share_size));
+                            EXPECT_EQUAL(hybrid_pq_share_size, negotiated_kem_group->kem->public_key_length);
+                        }
+                        EXPECT_SUCCESS(s2n_stuffer_skip_read(&key_share_extension, negotiated_kem_group->kem->public_key_length));
 
                         /* If all the sizes/bytes were correctly written, there should be nothing left over */
                         EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
@@ -362,25 +372,31 @@ int main() {
                         EXPECT_TRUE(first_total_hybrid_share_size < s2n_stuffer_data_available(&first_extension));
                         EXPECT_EQUAL(second_total_hybrid_share_size, s2n_stuffer_data_available(&second_extension));
 
-                        /* Read the ecc share size.
-                         * The ecc share should be identical for both, so the size should be the same. */
-                        uint16_t first_ecc_share_size = 0, second_ecc_share_size = 0;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&first_extension, &first_ecc_share_size));
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&second_extension, &second_ecc_share_size));
-                        EXPECT_EQUAL(first_ecc_share_size, second_ecc_share_size);
+                        if (len_prefixed) {
+                            /* Read the ecc share size.
+                             * The ecc share should be identical for both, so the size should be the same. */
+                            uint16_t first_ecc_share_size = 0, second_ecc_share_size = 0;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&first_extension, &first_ecc_share_size));
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&second_extension, &second_ecc_share_size));
+                            EXPECT_EQUAL(first_ecc_share_size, second_ecc_share_size);
+                        }
 
                         /* Read the ecc share.
                          * The ecc share should be identical for both. */
+                        struct s2n_kem_group_params *kem_group_params = &conn->kex_params.client_kem_group_params;
+                        int ecc_share_size = kem_group_params->ecc_params.negotiated_curve->share_size;
                         uint8_t *first_ecc_share_data = NULL, *second_ecc_share_data = NULL;
-                        EXPECT_NOT_NULL(first_ecc_share_data = s2n_stuffer_raw_read(&first_extension, first_ecc_share_size));
-                        EXPECT_NOT_NULL(second_ecc_share_data = s2n_stuffer_raw_read(&second_extension, second_ecc_share_size));
-                        EXPECT_BYTEARRAY_EQUAL(first_ecc_share_data, second_ecc_share_data, first_ecc_share_size);
+                        EXPECT_NOT_NULL(first_ecc_share_data = s2n_stuffer_raw_read(&first_extension, ecc_share_size));
+                        EXPECT_NOT_NULL(second_ecc_share_data = s2n_stuffer_raw_read(&second_extension, ecc_share_size));
+                        EXPECT_BYTEARRAY_EQUAL(first_ecc_share_data, second_ecc_share_data, ecc_share_size);
 
-                        /* The pq share should take up the rest of the key share.
-                         * For now the pq share is different between extensions, so we can't assert anything else. */
-                        uint16_t second_pq_share_size = 0;
-                        EXPECT_SUCCESS(s2n_stuffer_read_uint16(&second_extension, &second_pq_share_size));
-                        EXPECT_EQUAL(second_pq_share_size, s2n_stuffer_data_available(&second_extension));
+                        if (len_prefixed) {
+                            /* The pq share should take up the rest of the key share.
+                             * For now the pq share is different between extensions, so we can't assert anything else. */
+                            uint16_t second_pq_share_size = 0;
+                            EXPECT_SUCCESS(s2n_stuffer_read_uint16(&second_extension, &second_pq_share_size));
+                            EXPECT_EQUAL(second_pq_share_size, s2n_stuffer_data_available(&second_extension));
+                        }
 
                         EXPECT_SUCCESS(s2n_stuffer_free(&first_extension));
                         EXPECT_SUCCESS(s2n_stuffer_free(&second_extension));
@@ -419,8 +435,7 @@ int main() {
                         /* PQ share size: 2 bytes */
                         "0002"
                         /* Fake PQ share */
-                        "FFFF"
-                ));
+                        "FFFF"));
 
                 EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
 
@@ -466,22 +481,24 @@ int main() {
                          * correctly. */
                         const struct s2n_kem_group *test_kem_groups[S2N_SUPPORTED_KEM_GROUPS_COUNT];
                         for (size_t j = 0; j < S2N_SUPPORTED_KEM_GROUPS_COUNT; j++) {
+                            /* cppcheck-suppress moduloofone */
                             test_kem_groups[j] = ALL_SUPPORTED_KEM_GROUPS[(j + i) % S2N_SUPPORTED_KEM_GROUPS_COUNT];
                         }
 
                         const struct s2n_kem_preferences test_kem_prefs = {
-                                .kem_count = 0,
-                                .kems = NULL,
-                                .tls13_kem_group_count = s2n_array_len(test_kem_groups),
-                                .tls13_kem_groups = test_kem_groups,
+                            .kem_count = 0,
+                            .kems = NULL,
+                            .tls13_kem_group_count = s2n_array_len(test_kem_groups),
+                            .tls13_kem_groups = test_kem_groups,
+                            .tls13_pq_hybrid_draft_revision = draft_revision
                         };
 
                         const struct s2n_security_policy test_security_policy = {
-                                .minimum_protocol_version = S2N_SSLv3,
-                                .cipher_preferences = &cipher_preferences_test_all_tls13,
-                                .kem_preferences = &test_kem_prefs,
-                                .signature_preferences = &s2n_signature_preferences_20200207,
-                                .ecc_preferences = &s2n_ecc_preferences_20200310,
+                            .minimum_protocol_version = S2N_SSLv3,
+                            .cipher_preferences = &cipher_preferences_test_all_tls13,
+                            .kem_preferences = &test_kem_prefs,
+                            .signature_preferences = &s2n_signature_preferences_20200207,
+                            .ecc_preferences = &s2n_ecc_preferences_20200310,
                         };
 
                         struct s2n_connection *client_conn = NULL, *server_conn = NULL;
@@ -494,16 +511,16 @@ int main() {
                         server_conn->security_policy_override = &security_policy_all;
                         EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
 
-                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
+                        DEFER_CLEANUP(struct s2n_stuffer key_share_extension = { 0 }, s2n_stuffer_free);
                         EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
 
                         EXPECT_SUCCESS(s2n_client_key_share_extension.send(client_conn, &key_share_extension));
 
                         /* The client writes its PQ key share directly to IO without saving it,
                          * so we make a copy from the wire to ensure that server saved it correctly. */
-                        DEFER_CLEANUP(struct s2n_blob pq_key_share_copy = {0}, s2n_free);
+                        DEFER_CLEANUP(struct s2n_blob pq_key_share_copy = { 0 }, s2n_free);
                         EXPECT_SUCCESS(s2n_copy_pq_share(&key_share_extension, &pq_key_share_copy,
-                                client_conn->kex_params.client_kem_group_params.kem_group));
+                                client_conn->kex_params.client_kem_group_params.kem_group, len_prefixed));
 
                         EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
 
@@ -537,7 +554,7 @@ int main() {
 
                         EXPECT_EQUAL(received_pq_params->kem_params.kem, test_kem_prefs.tls13_kem_groups[0]->kem);
                         EXPECT_NOT_NULL(received_pq_params->kem_params.public_key.data);
-                        EXPECT_EQUAL(received_pq_params->kem_params.public_key.size,test_kem_prefs.tls13_kem_groups[0]->kem->public_key_length);
+                        EXPECT_EQUAL(received_pq_params->kem_params.public_key.size, test_kem_prefs.tls13_kem_groups[0]->kem->public_key_length);
                         EXPECT_BYTEARRAY_EQUAL(received_pq_params->kem_params.public_key.data, pq_key_share_copy.data,
                                 sent_pq_params->kem_group->kem->public_key_length);
 
@@ -549,63 +566,10 @@ int main() {
                     }
                 }
 
-                /* Test that s2n_client_key_share_extension.recv can parse multiple shares */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike, classic p256, and p256_kyber */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    DEFER_CLEANUP(struct s2n_ecc_evp_params p256_params = { .negotiated_curve = &s2n_ecc_curve_secp256r1 }, s2n_ecc_evp_params_free);
-                    EXPECT_SUCCESS(s2n_ecdhe_parameters_send(&p256_params, &key_share_extension));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_kyber_params = { .kem_group = &s2n_secp256r1_kyber_512_r2 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_kyber_params));
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should have accepted the p256 share */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_EQUAL(received_ec_params->negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have accepted the p256_sike share (as the highest priority) */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_EQUAL(received_pq_params->kem_group, &s2n_secp256r1_sike_p434_r3);
-                    EXPECT_EQUAL(received_pq_params->kem_params.kem, &s2n_sike_p434_r3);
-                    EXPECT_NOT_NULL(received_pq_params->kem_params.public_key.data);
-                    EXPECT_EQUAL(received_pq_params->ecc_params.negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_pq_params->ecc_params.evp_pkey);
-
-                    /* Server should not have indicated HRR */
-                    EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
                 /* Test that s2n_client_key_share_extension.recv selects the highest priority share,
                  * even if it appears last in the client's list of shares. */
-                {
+                /* Need at least two KEM's to test fallback */
+                if (security_policy_all.kem_preferences->tls13_kem_group_count >= 2) {
                     struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER);
                     EXPECT_NOT_NULL(server_conn);
                     server_conn->actual_protocol_version = S2N_TLS13;
@@ -618,8 +582,8 @@ int main() {
                     EXPECT_TRUE(kem_pref->tls13_kem_group_count >= 2);
 
                     struct s2n_kem_group_params client_pq_params[] = {
-                            { .kem_group = kem_pref->tls13_kem_groups[0] },
-                            { .kem_group = kem_pref->tls13_kem_groups[1] }
+                        { .kem_group = kem_pref->tls13_kem_groups[0], .kem_params = { .len_prefixed = len_prefixed } },
+                        { .kem_group = kem_pref->tls13_kem_groups[1], .kem_params = { .len_prefixed = len_prefixed } }
                     };
 
                     struct s2n_stuffer key_share_extension = { 0 };
@@ -653,7 +617,8 @@ int main() {
                 /* Test that s2n_client_key_share_extension.recv ignores shares for groups not offered
                  * by the client / "mutually supported", and triggers a retry instead.
                  */
-                {
+                /* Need at least two KEM's to test fallback */
+                if (security_policy_all.kem_preferences->tls13_kem_group_count >= 2) {
                     struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER);
                     EXPECT_NOT_NULL(server_conn);
                     server_conn->actual_protocol_version = S2N_TLS13;
@@ -668,7 +633,8 @@ int main() {
                     EXPECT_NOT_NULL(kem_pref);
                     EXPECT_TRUE(kem_pref->tls13_kem_group_count >= 2);
 
-                    struct s2n_kem_group_params client_pq_params = { .kem_group = kem_pref->tls13_kem_groups[0] };
+                    struct s2n_kem_group_params client_pq_params = { .kem_group = kem_pref->tls13_kem_groups[0],
+                        .kem_params = { .len_prefixed = len_prefixed } };
 
                     struct s2n_stuffer key_share_extension = { 0 };
                     EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
@@ -698,7 +664,8 @@ int main() {
                 /* Test that s2n_client_key_share_extension.recv ignores shares for curves not offered
                  * by the client / "mutually supported", and chooses a lower priority curve instead.
                  */
-                {
+                /* Need at least two KEM's to test fallback */
+                if (security_policy_all.kem_preferences->tls13_kem_group_count >= 2) {
                     struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER);
                     EXPECT_NOT_NULL(server_conn);
                     server_conn->actual_protocol_version = S2N_TLS13;
@@ -714,8 +681,8 @@ int main() {
                     EXPECT_TRUE(kem_pref->tls13_kem_group_count >= 2);
 
                     struct s2n_kem_group_params client_pq_params[] = {
-                            { .kem_group = kem_pref->tls13_kem_groups[0] },
-                            { .kem_group = kem_pref->tls13_kem_groups[1] }
+                        { .kem_group = kem_pref->tls13_kem_groups[0], .kem_params = { .len_prefixed = len_prefixed } },
+                        { .kem_group = kem_pref->tls13_kem_groups[1], .kem_params = { .len_prefixed = len_prefixed } }
                     };
 
                     struct s2n_stuffer key_share_extension = { 0 };
@@ -746,335 +713,10 @@ int main() {
                     EXPECT_SUCCESS(s2n_connection_free(server_conn));
                 }
 
-                /* Test that s2n_client_key_share_extension.recv ignores an unsupported KEM Group */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    /* Security policy only includes the p256_sike434r2 kem group */
-                    server_conn->security_policy_override = &security_policy_sike;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike, classic p256, and p256_kyber */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    DEFER_CLEANUP(struct s2n_ecc_evp_params p256_params = { .negotiated_curve = &s2n_ecc_curve_secp256r1 }, s2n_ecc_evp_params_free);
-                    EXPECT_SUCCESS(s2n_ecdhe_parameters_send(&p256_params, &key_share_extension));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_kyber_params = { .kem_group = &s2n_secp256r1_kyber_512_r2 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_kyber_params));
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should have accepted p256 share and no other EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_EQUAL(received_ec_params->negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have accepted p256_sike, and no other hybrid shares */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_EQUAL(received_pq_params->kem_group, &s2n_secp256r1_sike_p434_r3);
-                    EXPECT_EQUAL(received_pq_params->kem_params.kem, &s2n_sike_p434_r3);
-                    EXPECT_NOT_NULL(received_pq_params->kem_params.public_key.data);
-                    EXPECT_EQUAL(received_pq_params->ecc_params.negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_pq_params->ecc_params.evp_pkey);
-
-                    /* Server should not have indicated HRR */
-                    EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
-                /* Test that s2n_client_key_share_extension.recv ignores a KEM group with incorrect total size */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike, classic p256 */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    EXPECT_SUCCESS(s2n_stuffer_write_uint16(&key_share_extension, TLS_PQ_KEM_GROUP_ID_SECP256R1_SIKE_P434_R3));
-                    EXPECT_SUCCESS(s2n_stuffer_write_uint16(&key_share_extension, 2)); /* Wrong hybrid share size */
-                    EXPECT_SUCCESS(s2n_stuffer_write_uint16(&key_share_extension, 0xFF)); /* Fake hybrid share */
-                    DEFER_CLEANUP(struct s2n_ecc_evp_params p256_params = { .negotiated_curve = &s2n_ecc_curve_secp256r1 }, s2n_ecc_evp_params_free);
-                    EXPECT_SUCCESS(s2n_ecdhe_parameters_send(&p256_params, &key_share_extension));
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should have accepted p256 share and no other EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_EQUAL(received_ec_params->negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have not have accepted any hybrid shares */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_NULL(received_pq_params->kem_group);
-                    EXPECT_NULL(received_pq_params->ecc_params.negotiated_curve);
-                    EXPECT_NULL(received_pq_params->ecc_params.evp_pkey);
-                    EXPECT_NULL(received_pq_params->kem_params.kem);
-                    EXPECT_NULL(received_pq_params->kem_params.public_key.data);
-
-                    /* Server should not have indicated HRR */
-                    EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
-                /* Test that s2n_client_key_share_extension.recv ignores a KEM group with incorrect EC share size */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    /* key_share_extension.blob.data[6] is the first byte of the EC share size in the overall hybrid share */
-                    key_share_extension.blob.data[6] = ~key_share_extension.blob.data[6];
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should not have accepted any EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_NULL(received_ec_params->negotiated_curve);
-                    EXPECT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have not have accepted any hybrid shares */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_NULL(received_pq_params->kem_group);
-                    EXPECT_NULL(received_pq_params->ecc_params.negotiated_curve);
-                    EXPECT_NULL(received_pq_params->ecc_params.evp_pkey);
-                    EXPECT_NULL(received_pq_params->kem_params.kem);
-                    EXPECT_NULL(received_pq_params->kem_params.public_key.data);
-
-                    /* Server should have indicated HRR */
-                    EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
-                /* Test that s2n_client_key_share_extension.recv ignores a KEM group with incorrect PQ share size */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    /* key_share_extension.blob.data[73] is the first byte of the PQ share size in the overall hybrid share */
-                    key_share_extension.blob.data[73] = ~key_share_extension.blob.data[73];
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should not have accepted any EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_NULL(received_ec_params->negotiated_curve);
-                    EXPECT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have not have accepted any hybrid shares */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_NULL(received_pq_params->kem_group);
-                    EXPECT_NULL(received_pq_params->ecc_params.negotiated_curve);
-                    EXPECT_NULL(received_pq_params->ecc_params.evp_pkey);
-                    EXPECT_NULL(received_pq_params->kem_params.kem);
-                    EXPECT_NULL(received_pq_params->kem_params.public_key.data);
-
-                    /* Server should have indicated HRR */
-                    EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
-                /* Test that s2n_client_key_share_extension.recv uses the first received key share when duplicates are present  */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with two shares for p256_sike */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params_extra = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params_extra));
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    /* The client writes its hybrid key share directly to IO without saving it,
-                     * so we make a copy of the first share from the wire to ensure that server
-                     * saved the correct one. */
-                    DEFER_CLEANUP(struct s2n_blob pq_key_share_copy = {0}, s2n_free);
-                    EXPECT_SUCCESS(s2n_copy_pq_share(&key_share_extension, &pq_key_share_copy, &s2n_secp256r1_sike_p434_r3));
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should not accepted any EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_NULL(received_ec_params->negotiated_curve);
-                    EXPECT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should have accepted the first p256_sike share */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_EQUAL(received_pq_params->kem_group, &s2n_secp256r1_sike_p434_r3);
-                    EXPECT_EQUAL(received_pq_params->kem_params.kem, &s2n_sike_p434_r3);
-                    EXPECT_NOT_NULL(received_pq_params->kem_params.public_key.data);
-                    EXPECT_EQUAL(received_pq_params->ecc_params.negotiated_curve, &s2n_ecc_curve_secp256r1);
-                    EXPECT_NOT_NULL(received_pq_params->ecc_params.evp_pkey);
-                    EXPECT_BYTEARRAY_EQUAL(pq_key_share_copy.data, received_pq_params->kem_params.public_key.data, s2n_sike_p434_r3.public_key_length);
-
-                    /* Server should not have indicated HRR */
-                    EXPECT_FALSE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
-                /* Test that s2n_client_key_share_extension.recv ignores KEM groups with EC shares that can't be parsed */
-                {
-                    struct s2n_connection *server_conn = NULL;
-                    EXPECT_NOT_NULL(server_conn = s2n_connection_new(S2N_SERVER));
-                    server_conn->actual_protocol_version = S2N_TLS13;
-                    server_conn->security_policy_override = &security_policy_all;
-                    EXPECT_OK(s2n_set_all_mutually_supported_groups(server_conn));
-
-                    DEFER_CLEANUP(struct s2n_stuffer key_share_extension = {0}, s2n_stuffer_free);
-                    EXPECT_SUCCESS(s2n_stuffer_growable_alloc(&key_share_extension, 8192));
-
-                    /* Send a key share extension with shares for p256_sike */
-                    struct s2n_stuffer_reservation shares_size = {0};
-                    EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &shares_size));
-                    DEFER_CLEANUP(struct s2n_kem_group_params p256_sike_params = { .kem_group = &s2n_secp256r1_sike_p434_r3 }, s2n_kem_group_free);
-                    EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &p256_sike_params));
-                    EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&shares_size));
-
-                    /* Wipe the EC share so that the point parsing fails */
-                    for (size_t i = 8; i < s2n_secp256r1_sike_p434_r3.curve->share_size; i++) {
-                        key_share_extension.blob.data[i] = 0;
-                    }
-
-                    EXPECT_SUCCESS(s2n_client_key_share_extension.recv(server_conn, &key_share_extension));
-
-                    /* .recv should have read all data */
-                    EXPECT_EQUAL(s2n_stuffer_data_available(&key_share_extension), 0);
-
-                    const struct s2n_ecc_preferences *ecc_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_ecc_preferences(server_conn, &ecc_pref));
-                    EXPECT_NOT_NULL(ecc_pref);
-
-                    /* Server should not accepted any EC shares */
-                    struct s2n_ecc_evp_params *received_ec_params = &server_conn->kex_params.client_ecc_evp_params;
-                    EXPECT_NULL(received_ec_params->negotiated_curve);
-                    EXPECT_NULL(received_ec_params->evp_pkey);
-
-                    const struct s2n_kem_preferences *kem_pref = NULL;
-                    EXPECT_SUCCESS(s2n_connection_get_kem_preferences(server_conn, &kem_pref));
-                    EXPECT_NOT_NULL(kem_pref);
-
-                    /* Server should not have accepted the p256_sike share */
-                    struct s2n_kem_group_params *received_pq_params = &server_conn->kex_params.client_kem_group_params;
-                    EXPECT_NULL(received_pq_params->kem_group);
-                    EXPECT_NULL(received_pq_params->ecc_params.negotiated_curve);
-                    EXPECT_NULL(received_pq_params->ecc_params.evp_pkey);
-                    EXPECT_NULL(received_pq_params->kem_params.kem);
-                    EXPECT_NULL(received_pq_params->kem_params.public_key.data);
-
-                    /* Server should have indicated HRR */
-                    EXPECT_TRUE(s2n_is_hello_retry_handshake(server_conn));
-
-                    EXPECT_SUCCESS(s2n_connection_free(server_conn));
-                }
-
                 /* Test that s2n_client_key_share_extension.recv ignores shares that can't be parsed,
                  * and continues to parse valid shares afterwards. */
-                {
+                /* Need at least two KEM's to test fallback */
+                if (security_policy_all.kem_preferences->tls13_kem_group_count >= 2) {
                     struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER);
                     EXPECT_NOT_NULL(server_conn);
                     server_conn->security_policy_override = &security_policy_all;
@@ -1090,8 +732,8 @@ int main() {
                     EXPECT_TRUE(kem_pref->tls13_kem_group_count >= 2);
 
                     struct s2n_kem_group_params client_pq_params[] = {
-                            { .kem_group = kem_pref->tls13_kem_groups[0] },
-                            { .kem_group = kem_pref->tls13_kem_groups[1] }
+                        { .kem_group = kem_pref->tls13_kem_groups[0], .kem_params = { .len_prefixed = len_prefixed } },
+                        { .kem_group = kem_pref->tls13_kem_groups[1], .kem_params = { .len_prefixed = len_prefixed } }
                     };
 
                     /* Write share list length */
@@ -1099,9 +741,15 @@ int main() {
                     EXPECT_SUCCESS(s2n_stuffer_reserve_uint16(&key_share_extension, &keyshare_list_size));
                     /* Write first share. Mess up point by erasing most of it */
                     EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &client_pq_params[0]));
-                    size_t share_size = kem_pref->tls13_kem_groups[0]->client_share_size;
-                    EXPECT_SUCCESS(s2n_stuffer_wipe_n(&key_share_extension, share_size));
-                    EXPECT_SUCCESS(s2n_stuffer_skip_write(&key_share_extension, share_size));
+                    const struct s2n_kem_group *kem_group = kem_pref->tls13_kem_groups[0];
+                    size_t hybrid_share_size = kem_group->curve->share_size + kem_group->kem->public_key_length;
+
+                    if (len_prefixed) {
+                        hybrid_share_size += (2 * S2N_SIZE_OF_KEY_SHARE_SIZE);
+                    }
+
+                    EXPECT_SUCCESS(s2n_stuffer_wipe_n(&key_share_extension, hybrid_share_size));
+                    EXPECT_SUCCESS(s2n_stuffer_skip_write(&key_share_extension, hybrid_share_size));
                     /* Write second, valid share */
                     EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &client_pq_params[1]));
                     /* Finish share list length */
@@ -1125,7 +773,8 @@ int main() {
 
                 /* Test that s2n_client_key_share_extension.recv ignores shares that can't be parsed,
                  * and doesn't ignore / forget / overwrite valid shares already parsed. */
-                {
+                /* Need at least two KEM's to test fallback */
+                if (security_policy_all.kem_preferences->tls13_kem_group_count >= 2) {
                     struct s2n_connection *server_conn = s2n_connection_new(S2N_SERVER);
                     EXPECT_NOT_NULL(server_conn);
                     server_conn->security_policy_override = &security_policy_all;
@@ -1141,8 +790,8 @@ int main() {
                     EXPECT_TRUE(kem_pref->tls13_kem_group_count >= 2);
 
                     struct s2n_kem_group_params client_pq_params[] = {
-                            { .kem_group = kem_pref->tls13_kem_groups[0] },
-                            { .kem_group = kem_pref->tls13_kem_groups[1] }
+                        { .kem_group = kem_pref->tls13_kem_groups[0], .kem_params = { .len_prefixed = len_prefixed } },
+                        { .kem_group = kem_pref->tls13_kem_groups[1], .kem_params = { .len_prefixed = len_prefixed } }
                     };
 
                     /* Write share list length */
@@ -1152,9 +801,15 @@ int main() {
                     EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &client_pq_params[0]));
                     /* Write second share. Mess up point by erasing most of it */
                     EXPECT_SUCCESS(s2n_generate_pq_hybrid_key_share_for_test(&key_share_extension, &client_pq_params[1]));
-                    size_t share_size = kem_pref->tls13_kem_groups[1]->client_share_size;
-                    EXPECT_SUCCESS(s2n_stuffer_wipe_n(&key_share_extension, share_size / 2));
-                    EXPECT_SUCCESS(s2n_stuffer_skip_write(&key_share_extension, share_size / 2));
+                    const struct s2n_kem_group *kem_group = kem_pref->tls13_kem_groups[0];
+                    size_t hybrid_share_size = kem_group->curve->share_size + kem_group->kem->public_key_length;
+
+                    if (len_prefixed) {
+                        hybrid_share_size += (2 * S2N_SIZE_OF_KEY_SHARE_SIZE);
+                    }
+
+                    EXPECT_SUCCESS(s2n_stuffer_wipe_n(&key_share_extension, hybrid_share_size / 2));
+                    EXPECT_SUCCESS(s2n_stuffer_skip_write(&key_share_extension, hybrid_share_size / 2));
                     /* Finish share list length */
                     EXPECT_SUCCESS(s2n_stuffer_write_vector_size(&keyshare_list_size));
 
@@ -1185,21 +840,29 @@ int main() {
 /* Copies the PQ portion of the keyshare. Assumes that the read cursor of *from is
  * pointing to the beginning of the hybrid share. After copying, rewinds *from so
  * that read cursor is at the original position. */
-static int s2n_copy_pq_share(struct s2n_stuffer *from, struct s2n_blob *to, const struct s2n_kem_group *kem_group) {
+static int s2n_copy_pq_share(struct s2n_stuffer *from, struct s2n_blob *to, const struct s2n_kem_group *kem_group, bool len_prefixed)
+{
     POSIX_ENSURE_REF(from);
     POSIX_ENSURE_REF(to);
     POSIX_ENSURE_REF(kem_group);
 
+    int keyshare_extension_offset = 10;
+
+    if (!len_prefixed) {
+        keyshare_extension_offset -= (2 * S2N_SIZE_OF_KEY_SHARE_SIZE);
+    }
+
     POSIX_GUARD(s2n_alloc(to, kem_group->kem->public_key_length));
     /* Skip all the two-byte IDs/sizes and the ECC portion of the share */
-    POSIX_GUARD(s2n_stuffer_skip_read(from, 10 + kem_group->curve->share_size));
+    POSIX_GUARD(s2n_stuffer_skip_read(from, keyshare_extension_offset + kem_group->curve->share_size));
     POSIX_GUARD(s2n_stuffer_read(from, to));
-    POSIX_GUARD(s2n_stuffer_rewind_read(from, 10 + kem_group->curve->share_size + kem_group->kem->public_key_length));
+    POSIX_GUARD(s2n_stuffer_rewind_read(from, keyshare_extension_offset + kem_group->curve->share_size + kem_group->kem->public_key_length));
 
     return S2N_SUCCESS;
 }
 
-static int s2n_generate_pq_hybrid_key_share_for_test(struct s2n_stuffer *out, struct s2n_kem_group_params *kem_group_params) {
+static int s2n_generate_pq_hybrid_key_share_for_test(struct s2n_stuffer *out, struct s2n_kem_group_params *kem_group_params)
+{
     POSIX_ENSURE_REF(out);
     POSIX_ENSURE_REF(kem_group_params);
 
@@ -1211,16 +874,19 @@ static int s2n_generate_pq_hybrid_key_share_for_test(struct s2n_stuffer *out, st
 
     POSIX_GUARD(s2n_stuffer_write_uint16(out, kem_group->iana_id));
 
-    struct s2n_stuffer_reservation total_share_size = {0};
+    struct s2n_stuffer_reservation total_share_size = { 0 };
     POSIX_GUARD(s2n_stuffer_reserve_uint16(out, &total_share_size));
 
     struct s2n_ecc_evp_params *ecc_params = &kem_group_params->ecc_params;
     ecc_params->negotiated_curve = kem_group->curve;
-    POSIX_GUARD(s2n_stuffer_write_uint16(out, ecc_params->negotiated_curve->share_size));
+    struct s2n_kem_params *kem_params = &kem_group_params->kem_params;
+
+    if (kem_params->len_prefixed) {
+        POSIX_GUARD(s2n_stuffer_write_uint16(out, ecc_params->negotiated_curve->share_size));
+    }
     POSIX_GUARD(s2n_ecc_evp_generate_ephemeral_key(ecc_params));
     POSIX_GUARD(s2n_ecc_evp_write_params_point(ecc_params, out));
 
-    struct s2n_kem_params *kem_params = &kem_group_params->kem_params;
     kem_params->kem = kem_group->kem;
     POSIX_GUARD(s2n_kem_send_public_key(out, kem_params));
 

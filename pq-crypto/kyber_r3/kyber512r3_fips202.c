@@ -14,6 +14,8 @@
 #define NROUNDS 24
 #define ROL(a, offset) (((a) << (offset)) ^ ((a) >> (64 - (offset))))
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
  * Name:        load64
  *

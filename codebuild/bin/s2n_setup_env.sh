@@ -22,7 +22,7 @@ source codebuild/bin/s2n_set_build_preset.sh
 : "${BUILD_S2N:=false}"
 : "${GCC_VERSION:=NONE}"
 : "${LATEST_CLANG:=false}"
-: "${TESTS:=integration}"
+: "${TESTS:=unit}"
 : "${S2N_COVERAGE:=false}"
 : "${LD_LIBRARY_PATH:=NONE}"
 
@@ -41,17 +41,19 @@ source codebuild/bin/s2n_set_build_preset.sh
 : "${SCAN_BUILD_INSTALL_DIR:=$TEST_DEPS_DIR/scan-build}"
 : "${OPENSSL_0_9_8_INSTALL_DIR:=$TEST_DEPS_DIR/openssl-0.9.8}"
 : "${OPENSSL_1_1_1_INSTALL_DIR:=$TEST_DEPS_DIR/openssl-1.1.1}"
+: "${OPENSSL_3_0_INSTALL_DIR:=$TEST_DEPS_DIR/openssl-3.0}"
 : "${OPENSSL_1_0_2_INSTALL_DIR:=$TEST_DEPS_DIR/openssl-1.0.2}"
 : "${OQS_OPENSSL_1_1_1_INSTALL_DIR:=$TEST_DEPS_DIR/oqs_openssl-1.1.1}"
 : "${OPENSSL_1_0_2_FIPS_INSTALL_DIR:=$TEST_DEPS_DIR/openssl-1.0.2-fips}"
 : "${BORINGSSL_INSTALL_DIR:=$TEST_DEPS_DIR/boringssl}"
 : "${AWSLC_INSTALL_DIR:=$TEST_DEPS_DIR/awslc}"
 : "${AWSLC_FIPS_INSTALL_DIR:=$TEST_DEPS_DIR/awslc-fips}"
-: "${LIBRESSL_INSTALL_DIR:=$TEST_DEPS_DIR/libressl-3.4.3}"
+: "${LIBRESSL_INSTALL_DIR:=$TEST_DEPS_DIR/libressl}"
 : "${CPPCHECK_INSTALL_DIR:=$TEST_DEPS_DIR/cppcheck}"
 : "${CTVERIF_INSTALL_DIR:=$TEST_DEPS_DIR/ctverif}"
 : "${SIDETRAIL_INSTALL_DIR:=$TEST_DEPS_DIR/sidetrail}"
 : "${GB_INSTALL_DIR:=$TEST_DEPS_DIR/gb}"
+: "${APACHE2_INSTALL_DIR:=$TEST_DEPS_DIR/apache2}"
 : "${FUZZ_TIMEOUT_SEC:=10}"
 
 # Set some environment vars for OS, Distro and architecture.
@@ -97,6 +99,7 @@ export LATEST_CLANG_INSTALL_DIR
 export SCAN_BUILD_INSTALL_DIR
 export OPENSSL_0_9_8_INSTALL_DIR
 export OPENSSL_1_1_1_INSTALL_DIR
+export OPENSSL_3_0_INSTALL_DIR
 export OPENSSL_1_0_2_INSTALL_DIR
 export OPENSSL_1_0_2_FIPS_INSTALL_DIR
 export OQS_OPENSSL_1_1_1_INSTALL_DIR
@@ -112,6 +115,8 @@ export GB_INSTALL_DIR
 export OS_NAME
 export S2N_CORKED_IO
 export S2N_NO_PQ
+# For use by criterion/ci run reports
+export AWS_S3_URL="s3://s2n-tls-logs/release/"
 
 # S2N_COVERAGE should not be used with fuzz tests, use FUZZ_COVERAGE instead
 if [[ "$S2N_COVERAGE" == "true" && "$TESTS" == "fuzz" ]]; then
@@ -122,6 +127,7 @@ fi
 # Select the libcrypto to build s2n against. If this is unset, default to the latest stable version(Openssl 1.1.1)
 if [[ -z $S2N_LIBCRYPTO ]]; then export LIBCRYPTO_ROOT=$OPENSSL_1_1_1_INSTALL_DIR ; fi
 if [[ "$S2N_LIBCRYPTO" == "openssl-1.1.1" ]]; then export LIBCRYPTO_ROOT=$OPENSSL_1_1_1_INSTALL_DIR ; fi
+if [[ "$S2N_LIBCRYPTO" == "openssl-3.0" ]]; then export LIBCRYPTO_ROOT=$OPENSSL_3_0_INSTALL_DIR ; fi
 if [[ "$S2N_LIBCRYPTO" == "openssl-1.0.2" ]]; then export LIBCRYPTO_ROOT=$OPENSSL_1_0_2_INSTALL_DIR ; fi
 if [[ "$S2N_LIBCRYPTO" == "openssl-1.0.2-fips" ]]; then
     export LIBCRYPTO_ROOT=$OPENSSL_1_0_2_FIPS_INSTALL_DIR ;

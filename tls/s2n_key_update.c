@@ -13,21 +13,18 @@
  * permissions and limitations under the License.
  */
 
-#include "error/s2n_errno.h"
-
-#include "tls/s2n_connection.h"
 #include "tls/s2n_key_update.h"
-#include "tls/s2n_tls13_handshake.h"
-#include "tls/s2n_record.h"
-#include "tls/s2n_tls.h"
 
 #include "crypto/s2n_sequence.h"
-
+#include "error/s2n_errno.h"
+#include "tls/s2n_connection.h"
+#include "tls/s2n_record.h"
+#include "tls/s2n_tls.h"
+#include "tls/s2n_tls13_handshake.h"
 #include "utils/s2n_safety.h"
 
 int s2n_key_update_write(struct s2n_blob *out);
-int s2n_check_record_limit(struct s2n_connection *conn, struct s2n_blob *sequence_number); 
-
+int s2n_check_record_limit(struct s2n_connection *conn, struct s2n_blob *sequence_number);
 
 int s2n_key_update_recv(struct s2n_connection *conn, struct s2n_stuffer *request)
 {
@@ -42,7 +39,7 @@ int s2n_key_update_recv(struct s2n_connection *conn, struct s2n_stuffer *request
     conn->key_update_pending = key_update_request;
 
     /* Update peer's key since a key_update was received */
-    if (conn->mode == S2N_CLIENT){
+    if (conn->mode == S2N_CLIENT) {
         POSIX_GUARD(s2n_update_application_traffic_keys(conn, S2N_SERVER, RECEIVING));
     } else {
         POSIX_GUARD(s2n_update_application_traffic_keys(conn, S2N_CLIENT, RECEIVING));
@@ -51,29 +48,39 @@ int s2n_key_update_recv(struct s2n_connection *conn, struct s2n_stuffer *request
     return S2N_SUCCESS;
 }
 
-int s2n_key_update_send(struct s2n_connection *conn, s2n_blocked_status *blocked) 
+int s2n_key_update_send(struct s2n_connection *conn, s2n_blocked_status *blocked)
 {
     POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
 
-    struct s2n_blob sequence_number = {0};
+    struct s2n_blob sequence_number = { 0 };
     if (conn->mode == S2N_CLIENT) {
-        POSIX_GUARD(s2n_blob_init(&sequence_number, conn->secure.client_sequence_number, S2N_TLS_SEQUENCE_NUM_LEN));
+        POSIX_GUARD(s2n_blob_init(&sequence_number, conn->secure->client_sequence_number, S2N_TLS_SEQUENCE_NUM_LEN));
     } else {
-        POSIX_GUARD(s2n_blob_init(&sequence_number, conn->secure.server_sequence_number, S2N_TLS_SEQUENCE_NUM_LEN));
+        POSIX_GUARD(s2n_blob_init(&sequence_number, conn->secure->server_sequence_number, S2N_TLS_SEQUENCE_NUM_LEN));
     }
 
     POSIX_GUARD(s2n_check_record_limit(conn, &sequence_number));
 
     if (conn->key_update_pending) {
+        /* Flush any buffered records to ensure an empty output buffer.
+         *
+         * This is important when buffering multiple records because we don't:
+         * 1) Respect max fragment length for handshake messages
+         * 2) Check if there is sufficient space in the output buffer for
+         *    post-handshake messages.
+         */
+        POSIX_GUARD(s2n_flush(conn, blocked));
+
         uint8_t key_update_data[S2N_KEY_UPDATE_MESSAGE_SIZE];
-        struct s2n_blob key_update_blob = {0};
+        struct s2n_blob key_update_blob = { 0 };
         POSIX_GUARD(s2n_blob_init(&key_update_blob, key_update_data, sizeof(key_update_data)));
 
         /* Write key update message */
         POSIX_GUARD(s2n_key_update_write(&key_update_blob));
 
         /* Encrypt the message */
-        POSIX_GUARD(s2n_record_write(conn, TLS_HANDSHAKE,  &key_update_blob));
+        POSIX_GUARD_RESULT(s2n_record_write(conn, TLS_HANDSHAKE, &key_update_blob));
 
         /* Update encryption key */
         POSIX_GUARD(s2n_update_application_traffic_keys(conn, conn->mode, SENDING));
@@ -89,7 +96,7 @@ int s2n_key_update_write(struct s2n_blob *out)
 {
     POSIX_ENSURE_REF(out);
 
-    struct s2n_stuffer key_update_stuffer = {0};
+    struct s2n_stuffer key_update_stuffer = { 0 };
     POSIX_GUARD(s2n_stuffer_init(&key_update_stuffer, out));
     POSIX_GUARD(s2n_stuffer_write_uint8(&key_update_stuffer, TLS_KEY_UPDATE));
     POSIX_GUARD(s2n_stuffer_write_uint24(&key_update_stuffer, S2N_KEY_UPDATE_LENGTH));
@@ -104,16 +111,26 @@ int s2n_check_record_limit(struct s2n_connection *conn, struct s2n_blob *sequenc
 {
     POSIX_ENSURE_REF(conn);
     POSIX_ENSURE_REF(sequence_number);
-    POSIX_ENSURE_REF(conn->secure.cipher_suite);
-    POSIX_ENSURE_REF(conn->secure.cipher_suite->record_alg);
+    POSIX_ENSURE_REF(conn->secure);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite->record_alg);
 
-    uint64_t output = 0;
-    POSIX_GUARD(s2n_sequence_number_to_uint64(sequence_number, &output));
+    /*
+     * This is the sequence number that will be used for the next record,
+     * because we incremented the sequence number after sending the last record.
+     */
+    uint64_t next_seq_num = 0;
+    POSIX_GUARD(s2n_sequence_number_to_uint64(sequence_number, &next_seq_num));
 
-    if (output + 1 > conn->secure.cipher_suite->record_alg->encryption_limit) {
+    /*
+     * If the next record is the last record we can send, then the next record needs
+     * to contain a KeyUpdate message.
+     *
+     * This should always trigger on "==", but we use ">=" just in case.
+     */
+    if (next_seq_num >= conn->secure->cipher_suite->record_alg->encryption_limit) {
         conn->key_update_pending = true;
     }
 
     return S2N_SUCCESS;
 }
-

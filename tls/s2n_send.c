@@ -13,33 +13,79 @@
  * permissions and limitations under the License.
  */
 
-#include <sys/param.h>
 #include <errno.h>
+#include <sys/param.h>
+
 #include "api/s2n.h"
-
+#include "crypto/s2n_cipher.h"
 #include "error/s2n_errno.h"
-
+#include "stuffer/s2n_stuffer.h"
+#include "tls/s2n_alerts.h"
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_connection.h"
 #include "tls/s2n_handshake.h"
 #include "tls/s2n_post_handshake.h"
 #include "tls/s2n_record.h"
-
-#include "stuffer/s2n_stuffer.h"
-
-#include "crypto/s2n_cipher.h"
-
-#include "utils/s2n_safety.h"
 #include "utils/s2n_blob.h"
+#include "utils/s2n_safety.h"
 
-int s2n_flush(struct s2n_connection *conn, s2n_blocked_status * blocked)
+/*
+ * Determine whether there is currently sufficient space in the send buffer to construct
+ * another record, or if we need to flush now.
+ *
+ * We only buffer multiple records when sending application data, NOT when
+ * sending handshake messages or alerts. If the next record is a post-handshake message
+ * or an alert, then the send buffer will be flushed regardless of the result of this method.
+ * Therefore we don't need to consider the size of any potential KeyUpdate messages,
+ * NewSessionTicket messages, or Alerts.
+ */
+bool s2n_should_flush(struct s2n_connection *conn, ssize_t total_message_size)
+{
+    /* Always flush if not buffering multiple records. */
+    if (!conn->multirecord_send) {
+        return true;
+    }
+
+    /* Flush if all data has been sent. */
+    ssize_t remaining_payload_size = total_message_size - conn->current_user_data_consumed;
+    if (remaining_payload_size <= 0) {
+        return true;
+    }
+
+    uint16_t max_payload_size = 0;
+    if (!s2n_result_is_ok(s2n_record_max_write_payload_size(conn, &max_payload_size))) {
+        /* When in doubt, flush */
+        return true;
+    }
+    max_payload_size = MIN(max_payload_size, remaining_payload_size);
+
+    uint16_t max_write_size = 0;
+    if (!s2n_result_is_ok(s2n_record_max_write_size(conn, max_payload_size, &max_write_size))) {
+        /* When in doubt, flush */
+        return true;
+    }
+
+    /* Flush if the stuffer can't store the max possible record size without growing.
+     *
+     * However, the stuffer is allocated when the record is sent, so if the stuffer
+     * hasn't been allocated, assume it will have enough space.
+     */
+    uint32_t available_space = s2n_stuffer_space_remaining(&conn->out);
+    if (available_space < max_write_size && !s2n_stuffer_is_freed(&conn->out)) {
+        return true;
+    }
+
+    return false;
+}
+
+int s2n_flush(struct s2n_connection *conn, s2n_blocked_status *blocked)
 {
     int w;
 
     *blocked = S2N_BLOCKED_ON_WRITE;
 
     /* Write any data that's already pending */
-  WRITE:
+WRITE:
     while (s2n_stuffer_data_available(&conn->out)) {
         errno = 0;
         w = s2n_connection_send_stuffer(&conn->out, conn, s2n_stuffer_data_available(&conn->out));
@@ -59,12 +105,12 @@ int s2n_flush(struct s2n_connection *conn, s2n_blocked_status * blocked)
 
     /* If there's an alert pending out, send that */
     if (s2n_stuffer_data_available(&conn->reader_alert_out) == 2) {
-        struct s2n_blob alert = {0};
+        struct s2n_blob alert = { 0 };
         alert.data = conn->reader_alert_out.blob.data;
         alert.size = 2;
-        POSIX_GUARD(s2n_record_write(conn, TLS_ALERT, &alert));
+        POSIX_GUARD_RESULT(s2n_record_write(conn, TLS_ALERT, &alert));
         POSIX_GUARD(s2n_stuffer_rewrite(&conn->reader_alert_out));
-        conn->closing = 1;
+        POSIX_GUARD_RESULT(s2n_alerts_close_if_fatal(conn, &alert));
 
         /* Actually write it ... */
         goto WRITE;
@@ -72,12 +118,12 @@ int s2n_flush(struct s2n_connection *conn, s2n_blocked_status * blocked)
 
     /* Do the same for writer driven alerts */
     if (s2n_stuffer_data_available(&conn->writer_alert_out) == 2) {
-        struct s2n_blob alert = {0};
+        struct s2n_blob alert = { 0 };
         alert.data = conn->writer_alert_out.blob.data;
         alert.size = 2;
-        POSIX_GUARD(s2n_record_write(conn, TLS_ALERT, &alert));
+        POSIX_GUARD_RESULT(s2n_record_write(conn, TLS_ALERT, &alert));
         POSIX_GUARD(s2n_stuffer_rewrite(&conn->writer_alert_out));
-        conn->closing = 1;
+        POSIX_GUARD_RESULT(s2n_alerts_close_if_fatal(conn, &alert));
 
         /* Actually write it ... */
         goto WRITE;
@@ -88,7 +134,8 @@ int s2n_flush(struct s2n_connection *conn, s2n_blocked_status * blocked)
     return 0;
 }
 
-ssize_t s2n_sendv_with_offset_impl(struct s2n_connection *conn, const struct iovec *bufs, ssize_t count, ssize_t offs, s2n_blocked_status *blocked)
+ssize_t s2n_sendv_with_offset_impl(struct s2n_connection *conn, const struct iovec *bufs,
+        ssize_t count, ssize_t offs, s2n_blocked_status *blocked)
 {
     ssize_t user_data_sent, total_size = 0;
 
@@ -118,10 +165,10 @@ ssize_t s2n_sendv_with_offset_impl(struct s2n_connection *conn, const struct iov
     }
 
     /* Defensive check against an invalid retry */
-    if (offs) {
-        const struct iovec* _bufs = bufs;
+    if (offs > 0) {
+        const struct iovec *_bufs = bufs;
         ssize_t _count = count;
-        while (offs >= _bufs->iov_len && _count > 0) {
+        while ((size_t) offs >= _bufs->iov_len && _count > 0) {
             offs -= _bufs->iov_len;
             _bufs++;
             _count--;
@@ -162,54 +209,60 @@ ssize_t s2n_sendv_with_offset_impl(struct s2n_connection *conn, const struct iov
         /* Don't split messages in server mode for interoperability with naive clients.
          * Some clients may have expectations based on the amount of content in the first record.
          */
-        if (conn->actual_protocol_version < S2N_TLS11 && writer->cipher_suite->record_alg->cipher->type == S2N_CBC && conn->mode != S2N_SERVER) {
+        if (conn->actual_protocol_version < S2N_TLS11
+                && writer->cipher_suite->record_alg->cipher->type == S2N_CBC && conn->mode != S2N_SERVER) {
             if (to_write > 1 && cbcHackUsed == 0) {
                 to_write = 1;
                 cbcHackUsed = 1;
             }
         }
-    
-        POSIX_GUARD(s2n_stuffer_rewrite(&conn->out));
 
         POSIX_GUARD(s2n_post_handshake_send(conn, blocked));
-    
+
         /* Write and encrypt the record */
-        POSIX_GUARD(s2n_record_writev(conn, TLS_APPLICATION_DATA, bufs, count, 
-            conn->current_user_data_consumed + offs, to_write));
-        conn->current_user_data_consumed += to_write;
-        conn->active_application_bytes_consumed += to_write;
+        int written_to_record = s2n_record_writev(conn, TLS_APPLICATION_DATA, bufs, count,
+                conn->current_user_data_consumed + offs, to_write);
+        POSIX_GUARD(written_to_record);
+        conn->current_user_data_consumed += written_to_record;
+        conn->active_application_bytes_consumed += written_to_record;
 
-        /* Send it */
-        if (s2n_flush(conn, blocked) < 0) {
-            if (s2n_errno == S2N_ERR_IO_BLOCKED && user_data_sent > 0) {
-                /* We successfully sent >0 user bytes on the wire, but not the full requested payload
-                 * because we became blocked on I/O. Acknowledge the data sent. */
+        /* Send it, unless we're waiting for more records */
+        if (s2n_should_flush(conn, total_size)) {
+            if (s2n_flush(conn, blocked) < 0) {
+                if (s2n_errno == S2N_ERR_IO_BLOCKED && user_data_sent > 0) {
+                    /* We successfully sent >0 user bytes on the wire, but not the full requested payload
+                     * because we became blocked on I/O. Acknowledge the data sent. */
 
-                conn->current_user_data_consumed -= user_data_sent;
-                return user_data_sent;
-            } else {
-                S2N_ERROR_PRESERVE_ERRNO();
+                    conn->current_user_data_consumed -= user_data_sent;
+                    return user_data_sent;
+                } else {
+                    S2N_ERROR_PRESERVE_ERRNO();
+                }
             }
-        }
 
-        /* Acknowledge consumed and flushed user data as sent */
-        user_data_sent = conn->current_user_data_consumed;
+            /* Acknowledge consumed and flushed user data as sent */
+            user_data_sent = conn->current_user_data_consumed;
+        }
     }
 
     /* If everything has been written, then there's no user data pending */
     conn->current_user_data_consumed = 0;
 
     *blocked = S2N_NOT_BLOCKED;
-
-    POSIX_GUARD_RESULT(s2n_early_data_record_bytes(conn, total_size));
     return total_size;
 }
 
-ssize_t s2n_sendv_with_offset(struct s2n_connection *conn, const struct iovec *bufs, ssize_t count, ssize_t offs, s2n_blocked_status *blocked)
+ssize_t s2n_sendv_with_offset(struct s2n_connection *conn, const struct iovec *bufs, ssize_t count,
+        ssize_t offs, s2n_blocked_status *blocked)
 {
     POSIX_ENSURE(!conn->send_in_use, S2N_ERR_REENTRANCY);
     conn->send_in_use = true;
+
     ssize_t result = s2n_sendv_with_offset_impl(conn, bufs, count, offs, blocked);
+    POSIX_GUARD_RESULT(s2n_early_data_record_bytes(conn, result));
+
+    POSIX_GUARD_RESULT(s2n_connection_dynamic_free_out_buffer(conn));
+
     conn->send_in_use = false;
     return result;
 }
@@ -222,7 +275,7 @@ ssize_t s2n_sendv(struct s2n_connection *conn, const struct iovec *bufs, ssize_t
 ssize_t s2n_send(struct s2n_connection *conn, const void *buf, ssize_t size, s2n_blocked_status *blocked)
 {
     struct iovec iov;
-    iov.iov_base = (void*)(uintptr_t)buf;
+    iov.iov_base = (void *) (uintptr_t) buf;
     iov.iov_len = size;
     return s2n_sendv_with_offset(conn, &iov, 1, 0, blocked);
 }

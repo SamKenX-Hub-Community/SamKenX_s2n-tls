@@ -13,22 +13,20 @@
  * permissions and limitations under the License.
  */
 
-#include "s2n_test.h"
-
-#include "utils/s2n_blob.h"
-
 #include "api/s2n.h"
+#include "s2n_test.h"
+#include "utils/s2n_blob.h"
 
 int raises_error()
 {
-  POSIX_BAIL(S2N_ERR_INVALID_ARGUMENT);
+    POSIX_BAIL(S2N_ERR_INVALID_ARGUMENT);
 }
 
 int main(int argc, char **argv)
 {
     BEGIN_TEST();
     EXPECT_SUCCESS(s2n_disable_tls13_in_test());
-#ifdef S2N_HAVE_EXECINFO
+#ifdef S2N_STACKTRACE
     EXPECT_SUCCESS(s2n_stack_traces_enabled_set(true));
     struct s2n_stacktrace trace;
     /* If nothing has errored yet, we have no stacktrace */
@@ -43,7 +41,7 @@ int main(int argc, char **argv)
     EXPECT_NOT_EQUAL(trace.trace_size, 0);
 
     /* Test printing the stacktrace. */
-    FILE *stream = fopen("/dev/null","w");
+    FILE *stream = fopen("/dev/null", "w");
     EXPECT_SUCCESS(s2n_print_stacktrace(stream));
     fclose(stream);
 

@@ -51,42 +51,81 @@ if [[ "$OS_NAME" == "linux" && "$TESTS" == "valgrind" ]]; then
     kill %1
 fi
 
-if [[ "$OS_NAME" == "linux" && ( ("$TESTS" == "integration") || ("$TESTS" == "integrationv2") ) ]]; then
-    make -j $JOBS
-fi
-
-# Build and run unit tests with scan-build for osx. scan-build bundle isn't available for linux
-if [[ "$OS_NAME" == "osx" && "$TESTS" == "integration" ]]; then
-    scan-build --status-bugs -o /tmp/scan-build make -j$JOBS; STATUS=$?; test $STATUS -ne 0 && cat /tmp/scan-build/*/* ; [ "$STATUS" -eq "0" ];
-fi
-
 CMAKE_PQ_OPTION="S2N_NO_PQ=False"
 if [[ -n "$S2N_NO_PQ" ]]; then
     CMAKE_PQ_OPTION="S2N_NO_PQ=True"
 fi
 
+test_linked_libcrypto() {
+    s2n_executable="$1"
+    so_path="${LIBCRYPTO_ROOT}/lib/libcrypto.so"
+    echo "Testing for linked libcrypto: ${so_path}"
+    echo "ldd:"
+    ldd "${s2n_executable}"
+    ldd "${s2n_executable}" | grep "${so_path}" || \
+        { echo "Linked libcrypto is incorrect."; exit 1; }
+    echo "Test succeeded!"
+}
+
+setup_apache_server() {
+    # Start the apache server if the list of tests isn't defined, meaning all tests
+    # are to be run, or if the renegotiate test is included in the list of tests.
+    if [[ -z $TOX_TEST_NAME ]] || [[ "${TOX_TEST_NAME}" == *"test_renegotiate_apache"* ]]; then
+        source codebuild/bin/s2n_apache2.sh
+        APACHE_CERT_DIR="$(pwd)/tests/pems"
+
+        apache2_start "${APACHE_CERT_DIR}"
+    fi
+}
+
+run_integration_v2_tests() {
+    setup_apache_server
+    "$CB_BIN_DIR/install_s2n_head.sh" "$(mktemp -d)"
+    cmake . -Bbuild \
+            -DCMAKE_PREFIX_PATH=$LIBCRYPTO_ROOT \
+            -D${CMAKE_PQ_OPTION} \
+            -DS2N_BLOCK_NONPORTABLE_OPTIMIZATIONS=True \
+            -DBUILD_SHARED_LIBS=on \
+            -DS2N_INTEG_TESTS=on \
+            -DPython3_EXECUTABLE=$(which python3)
+    cmake --build ./build --clean-first -- -j $(nproc)
+    test_linked_libcrypto ./build/bin/s2nc
+    test_linked_libcrypto ./build/bin/s2nd
+    cp -f ./build/bin/s2nc "$BASE_S2N_DIR"/bin/s2nc
+    cp -f ./build/bin/s2nd "$BASE_S2N_DIR"/bin/s2nd
+    cd ./build/
+    for test_name in $TOX_TEST_NAME; do
+      test="${test_name//test_/}"
+      echo "Running... ctest --no-tests=error --output-on-failure --verbose -R ^integrationv2_${test}$"
+      ctest --no-tests=error --output-on-failure --verbose -R ^integrationv2_${test}$
+    done
+}
+
+run_unit_tests() {
+    cmake . -Bbuild \
+            -DCMAKE_PREFIX_PATH=$LIBCRYPTO_ROOT \
+            -D${CMAKE_PQ_OPTION} \
+            -DS2N_BLOCK_NONPORTABLE_OPTIMIZATIONS=True \
+            -DBUILD_SHARED_LIBS=on \
+            -DEXPERIMENTAL_TREAT_WARNINGS_AS_ERRORS=on
+    cmake --build ./build -- -j $(nproc)
+    test_linked_libcrypto ./build/bin/s2nc
+    cmake --build build/ --target test -- ARGS="-L unit --output-on-failure -j $(nproc)"
+}
+
 # Run Multiple tests on one flag.
-if [[ "$TESTS" == "ALL" || "$TESTS" == "sawHMACPlus" ]] && [[ "$OS_NAME" == "linux" ]]; then make -C tests/saw tmp/verify_HMAC.log tmp/verify_drbg.log sike failure-tests; fi
+if [[ "$TESTS" == "ALL" || "$TESTS" == "sawHMACPlus" ]] && [[ "$OS_NAME" == "linux" ]]; then make -C tests/saw tmp/verify_HMAC.log tmp/verify_drbg.log failure-tests; fi
 
 # Run Individual tests
-if [[ "$TESTS" == "ALL" || "$TESTS" == "unit" ]]; then cmake . -Bbuild -DCMAKE_PREFIX_PATH=$LIBCRYPTO_ROOT -D${CMAKE_PQ_OPTION} -DBUILD_SHARED_LIBS=on; cmake --build ./build; make -C build test ARGS=-j$(nproc); fi
+if [[ "$TESTS" == "ALL" || "$TESTS" == "unit" ]]; then run_unit_tests; fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "interning" ]]; then ./codebuild/bin/test_libcrypto_interning.sh; fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "asan" ]]; then make clean; S2N_ADDRESS_SANITIZER=1 make -j $JOBS ; fi
-if [[ "$TESTS" == "ALL" || "$TESTS" == "integration" ]]; then make clean; S2N_NO_SSLYZE=1 make integration ; fi
-if [[ "$TESTS" == "ALL" || "$TESTS" == "integrationv2" ]]; then $CB_BIN_DIR/install_s2n_head.sh "$(mktemp -d)"; make clean; make integrationv2 ; fi
+if [[ "$TESTS" == "ALL" || "$TESTS" == "integrationv2" ]]; then run_integration_v2_tests; fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "crt" ]]; then ./codebuild/bin/build_aws_crt_cpp.sh $(mktemp -d) $(mktemp -d); fi
+if [[ "$TESTS" == "ALL" || "$TESTS" == "sharedandstatic" ]]; then ./codebuild/bin/test_install_shared_and_static.sh $(mktemp -d); fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "fuzz" ]]; then (make clean && make fuzz) ; fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "benchmark" ]]; then (make clean && make benchmark) ; fi
 if [[ "$TESTS" == "sawHMAC" ]] && [[ "$OS_NAME" == "linux" ]]; then make -C tests/saw/ tmp/verify_HMAC.log ; fi
 if [[ "$TESTS" == "sawDRBG" ]]; then make -C tests/saw tmp/verify_drbg.log ; fi
 if [[ "$TESTS" == "ALL" || "$TESTS" == "tls" ]]; then make -C tests/saw tmp/verify_handshake.log ; fi
 if [[ "$TESTS" == "sawHMACFailure" ]]; then make -C tests/saw failure-tests ; fi
-# Below runs sike r_1 r_2 and x86
-if [[ "$TESTS" == "sawSIKE" ]]; then make -C tests/saw sike ; fi
-if [[ "$TESTS" == "ALL" || "$TESTS" == "sawBIKE" ]]; then make -C tests/saw bike ; fi
-
-# Generate *.gcov files that can be picked up by the CodeCov.io Bash helper script. Don't run lcov or genhtml
-# since those will delete .gcov files as they're processed.
-if [[ "$CODECOV_IO_UPLOAD" == "true" && "$FUZZ_COVERAGE" != "true" ]]; then
-    make run-gcov;
-fi

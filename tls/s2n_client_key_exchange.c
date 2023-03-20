@@ -14,27 +14,23 @@
  */
 
 #include <sys/param.h>
+
 #include "api/s2n.h"
-
+#include "crypto/s2n_dhe.h"
+#include "crypto/s2n_pkey.h"
+#include "crypto/s2n_rsa.h"
 #include "error/s2n_errno.h"
-
+#include "stuffer/s2n_stuffer.h"
 #include "tls/s2n_async_pkey.h"
-#include "tls/s2n_handshake.h"
-#include "tls/s2n_kem.h"
 #include "tls/s2n_cipher_suites.h"
 #include "tls/s2n_connection.h"
+#include "tls/s2n_handshake.h"
+#include "tls/s2n_kem.h"
 #include "tls/s2n_kex.h"
 #include "tls/s2n_key_log.h"
 #include "tls/s2n_resume.h"
-
-#include "stuffer/s2n_stuffer.h"
-
-#include "crypto/s2n_dhe.h"
-#include "crypto/s2n_rsa.h"
-#include "crypto/s2n_pkey.h"
-
-#include "utils/s2n_safety.h"
 #include "utils/s2n_random.h"
+#include "utils/s2n_safety.h"
 
 #define get_client_hello_protocol_version(conn) (conn->client_hello_version == S2N_SSLv2 ? conn->client_protocol_version : conn->client_hello_version)
 
@@ -46,11 +42,14 @@ static int s2n_rsa_client_key_recv_complete(struct s2n_connection *conn, bool rs
 static int s2n_hybrid_client_action(struct s2n_connection *conn, struct s2n_blob *combined_shared_key,
         s2n_kex_client_key_method kex_method, uint32_t *cursor, s2n_stuffer_action stuffer_action)
 {
+    POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
     POSIX_ENSURE_REF(kex_method);
     POSIX_ENSURE_REF(stuffer_action);
+
     struct s2n_stuffer *io = &conn->handshake.io;
-    const struct s2n_kex *hybrid_kex_0 = conn->secure.cipher_suite->key_exchange_alg->hybrid[0];
-    const struct s2n_kex *hybrid_kex_1 = conn->secure.cipher_suite->key_exchange_alg->hybrid[1];
+    const struct s2n_kex *hybrid_kex_0 = conn->secure->cipher_suite->key_exchange_alg->hybrid[0];
+    const struct s2n_kex *hybrid_kex_1 = conn->secure->cipher_suite->key_exchange_alg->hybrid[1];
 
     /* Keep a copy to the start of the entire hybrid client key exchange message for the hybrid PRF */
     struct s2n_blob *client_key_exchange_message = &conn->kex_params.client_key_exchange_message;
@@ -58,7 +57,7 @@ static int s2n_hybrid_client_action(struct s2n_connection *conn, struct s2n_blob
     POSIX_ENSURE_REF(client_key_exchange_message->data);
     const uint32_t start_cursor = *cursor;
 
-    DEFER_CLEANUP(struct s2n_blob shared_key_0 = {0}, s2n_free);
+    DEFER_CLEANUP(struct s2n_blob shared_key_0 = { 0 }, s2n_free);
     POSIX_GUARD_RESULT(kex_method(hybrid_kex_0, conn, &shared_key_0));
 
     struct s2n_blob *shared_key_1 = &(conn->kex_params.kem_params.shared_secret);
@@ -69,7 +68,7 @@ static int s2n_hybrid_client_action(struct s2n_connection *conn, struct s2n_blob
     client_key_exchange_message->size = end_cursor - start_cursor;
 
     POSIX_GUARD(s2n_alloc(combined_shared_key, shared_key_0.size + shared_key_1->size));
-    struct s2n_stuffer stuffer_combiner = {0};
+    struct s2n_stuffer stuffer_combiner = { 0 };
     POSIX_GUARD(s2n_stuffer_init(&stuffer_combiner, combined_shared_key));
     POSIX_GUARD(s2n_stuffer_write(&stuffer_combiner, &shared_key_0));
     POSIX_GUARD(s2n_stuffer_write(&stuffer_combiner, shared_key_1));
@@ -81,8 +80,12 @@ static int s2n_hybrid_client_action(struct s2n_connection *conn, struct s2n_blob
 
 static int s2n_calculate_keys(struct s2n_connection *conn, struct s2n_blob *shared_key)
 {
+    POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite);
+
     /* Turn the pre-master secret into a master secret */
-    POSIX_GUARD_RESULT(s2n_kex_tls_prf(conn->secure.cipher_suite->key_exchange_alg, conn, shared_key));
+    POSIX_GUARD_RESULT(s2n_kex_tls_prf(conn->secure->cipher_suite->key_exchange_alg, conn, shared_key));
 
     /* Expand the keys */
     POSIX_GUARD(s2n_prf_key_expansion(conn));
@@ -127,7 +130,8 @@ int s2n_rsa_client_key_recv(struct s2n_connection *conn, struct s2n_blob *shared
     client_hello_protocol_version[1] = legacy_client_hello_protocol_version % 10;
 
     /* Decrypt the pre-master secret */
-    struct s2n_blob encrypted = {.size = length, .data = s2n_stuffer_raw_read(in, length)};
+    struct s2n_blob encrypted = { 0 };
+    POSIX_GUARD(s2n_blob_init(&encrypted, s2n_stuffer_raw_read(in, length), length));
     POSIX_ENSURE_REF(encrypted.data);
     POSIX_ENSURE_GT(encrypted.size, 0);
 
@@ -200,6 +204,7 @@ int s2n_kem_client_key_recv(struct s2n_connection *conn, struct s2n_blob *shared
      * to kem_params.shared_secret. */
     POSIX_ENSURE_REF(shared_key);
     S2N_ERROR_IF(shared_key != &(conn->kex_params.kem_params.shared_secret), S2N_ERR_SAFETY);
+    conn->kex_params.kem_params.len_prefixed = true; /* PQ TLS 1.2 is always length prefixed. */
 
     POSIX_GUARD(s2n_kem_recv_ciphertext(&(conn->handshake.io), &(conn->kex_params.kem_params)));
 
@@ -214,8 +219,12 @@ int s2n_hybrid_client_key_recv(struct s2n_connection *conn, struct s2n_blob *com
 
 int s2n_client_key_recv(struct s2n_connection *conn)
 {
-    const struct s2n_kex *key_exchange = conn->secure.cipher_suite->key_exchange_alg;
-    DEFER_CLEANUP(struct s2n_blob shared_key = { 0 }, s2n_blob_zeroize_free);
+    POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite);
+
+    const struct s2n_kex *key_exchange = conn->secure->cipher_suite->key_exchange_alg;
+    DEFER_CLEANUP(struct s2n_blob shared_key = { 0 }, s2n_free_or_wipe);
     POSIX_GUARD_RESULT(s2n_kex_client_key_recv(key_exchange, conn, &shared_key));
 
     POSIX_GUARD(s2n_calculate_keys(conn, &shared_key));
@@ -268,7 +277,7 @@ int s2n_rsa_client_key_send(struct s2n_connection *conn, struct s2n_blob *shared
         POSIX_GUARD(s2n_stuffer_write_uint16(&conn->handshake.io, encrypted_size));
     }
 
-    struct s2n_blob encrypted = {0};
+    struct s2n_blob encrypted = { 0 };
     encrypted.data = s2n_stuffer_raw_write(&conn->handshake.io, encrypted_size);
     encrypted.size = encrypted_size;
     POSIX_ENSURE_REF(encrypted.data);
@@ -296,6 +305,8 @@ int s2n_kem_client_key_send(struct s2n_connection *conn, struct s2n_blob *shared
     POSIX_ENSURE_REF(shared_key);
     S2N_ERROR_IF(shared_key != &(conn->kex_params.kem_params.shared_secret), S2N_ERR_SAFETY);
 
+    conn->kex_params.kem_params.len_prefixed = true; /* PQ TLS 1.2 is always length prefixed */
+
     POSIX_GUARD(s2n_kem_send_ciphertext(&(conn->handshake.io), &(conn->kex_params.kem_params)));
 
     return 0;
@@ -304,13 +315,17 @@ int s2n_kem_client_key_send(struct s2n_connection *conn, struct s2n_blob *shared
 int s2n_hybrid_client_key_send(struct s2n_connection *conn, struct s2n_blob *combined_shared_key)
 {
     return s2n_hybrid_client_action(conn, combined_shared_key, &s2n_kex_client_key_send, &conn->handshake.io.write_cursor,
-                                    s2n_stuffer_raw_write);
+            s2n_stuffer_raw_write);
 }
 
 int s2n_client_key_send(struct s2n_connection *conn)
 {
-    const struct s2n_kex *key_exchange = conn->secure.cipher_suite->key_exchange_alg;
-    DEFER_CLEANUP(struct s2n_blob shared_key = { 0 }, s2n_blob_zeroize_free);
+    POSIX_ENSURE_REF(conn);
+    POSIX_ENSURE_REF(conn->secure);
+    POSIX_ENSURE_REF(conn->secure->cipher_suite);
+
+    const struct s2n_kex *key_exchange = conn->secure->cipher_suite->key_exchange_alg;
+    DEFER_CLEANUP(struct s2n_blob shared_key = { 0 }, s2n_free_or_wipe);
 
     POSIX_GUARD_RESULT(s2n_kex_client_key_send(key_exchange, conn, &shared_key));
 

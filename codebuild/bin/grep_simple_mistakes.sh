@@ -148,6 +148,20 @@ for file in $S2N_FILES_ASSERT_VARIABLE_NAME_INDEX; do
 done
 
 #############################################
+# Assert that we didn't accidentally add an extra semicolon when ending a line.
+# This also errors when there is whitespace in-between semicolons, as that is an empty
+# statement and usually not purposeful.
+#############################################
+S2N_FILES_ASSERT_DOUBLE_SEMICOLON=$(find "$PWD" -type f -name "s2n*.[ch]" -not -path "*/bindings/*")
+for file in $S2N_FILES_ASSERT_DOUBLE_SEMICOLON; do
+  RESULT_DOUBLE_SEMICOLON=`grep -Ern ';[[:space:]]*;' $file`
+  if [ "${#RESULT_DOUBLE_SEMICOLON}" != "0" ]; then
+    FAILED=1
+    printf "\e[1;34mFound a double semicolon in $file:\e[0m\n$RESULT_DOUBLE_SEMICOLON\n\n"
+  fi
+done
+
+#############################################
 ## Assert that there are no new uses of S2N_ERROR_IF
 # TODO add crypto, tls (see https://github.com/aws/s2n-tls/issues/2635)
 #############################################
@@ -163,6 +177,42 @@ for dir in $S2N_ERROR_IF_FREE; do
   done
 done
 
+#############################################
+## Assert all ".[c|h]" source files have the correct file mode.
+#############################################
+S2N_FILES_WITH_WRONG_MODE=$(find "$PWD" \( -name '*.c' -o -name '*.h' \) -a \! -perm 644)
+if [[ -n $S2N_FILES_WITH_WRONG_MODE ]]; then
+  for file in $S2N_FILES_WITH_WRONG_MODE; do
+    FAILED=1
+    printf "\\033[31;1mFile mode of %s is not 644.\\033[0m\\n" "$file"
+  done
+  printf "\\033[31;1mPlease run \`find s2n-tls/ -name '*.c' -o -name '*.h' -exec chmod 644 {} \\;\` to fix all file modes.\\033[0m\\n"
+fi
+
+#############################################
+## Assert "extern" is not added to function declarations unnecessarily.
+#############################################
+S2N_UNNECESSARY_EXTERNS=$(find "$PWD" -type f -name "s2n*.[h]" \! -path "*/api/*" \! -path "*/bindings/*" \
+  -exec grep -RE "extern (.*?) (.*?)\(" {} +)
+if [[ -n $S2N_UNNECESSARY_EXTERNS ]]; then
+  FAILED=1
+  printf "\e[1;34mFound unnecessary 'extern' in function declaration:\e[0m\n"
+  printf "$S2N_UNNECESSARY_EXTERNS\n\n"
+fi
+
+#############################################
+# Assert ENSURE/GUARD have a valid error code
+#############################################
+S2N_ENSURE_WITH_INVALID_ERROR_CODE=$(find "$PWD" -type f -name "s2n*.c" -path "*" \! -path "*/tests/*" \
+    -exec grep -RE "(ENSURE|GUARD_OSSL)\(.*?, .*?);" {} + | grep -v "S2N_ERR_")
+if [[ -n $S2N_ENSURE_WITH_INVALID_ERROR_CODE ]]; then
+  FAILED=1
+  printf "\e[1;34mENSURE and GUARD_OSSL require a valid error code from errors/s2n_errno.h:\e[0m\n"
+  printf "$S2N_ENSURE_WITH_INVALID_ERROR_CODE\n\n"
+fi
+
+#############################################
+# REPORT FINAL RESULTS
 #############################################
 if [ $FAILED == 1 ]; then
   printf "\\033[31;1mFAILED Grep For Simple Mistakes check\\033[0m\\n"

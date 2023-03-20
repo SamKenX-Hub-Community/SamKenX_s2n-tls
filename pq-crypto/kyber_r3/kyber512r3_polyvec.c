@@ -3,6 +3,8 @@
 #include "kyber512r3_poly.h"
 #include "kyber512r3_polyvec.h"
 
+S2N_ENSURE_PORTABLE_OPTIMIZATIONS
+
 /*************************************************
 * Name:        polyvec_compress
 *
